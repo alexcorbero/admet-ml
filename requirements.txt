@@ -1,0 +1,25 @@
+# Core scientific stack
+numpy==1.26.4
+pandas==2.3.3
+scipy==1.17.1
+scikit-learn==1.9.1
+
+# Cheminformatics
+rdkit==2023.9.6
+
+# Data / utilities
+openpyxl==3.1.5
+requests==2.34.2
+tqdm==4.70.1
+fuzzywuzzy==0.18.0
+
+# Visualization
+matplotlib==3.11.2
+seaborn==0.13.2
+
+# TDC compatibility
+huggingface-hub==0.36.2
+setuptools==80.9.0
+
+# Notebooks
+ipykernel
