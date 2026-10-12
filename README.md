@@ -9,7 +9,7 @@ The long-term goal is to build a modular pipeline that takes a molecular **SMILE
 ---
 
 ## Project vision
-
+```mermaid
 flowchart TD
     S[SMILES] --> R[Molecular representation]
 
@@ -47,9 +47,10 @@ flowchart TD
     T --> T2[AMES]
     T --> T3[DILI]
     T --> T4[LD50]
-
+```
 The intended final output is a molecule-level ADMET profile such as:
 
+```text
 SMILES
  │
  ├─ Physicochemical
@@ -81,6 +82,7 @@ SMILES
 
 Applicability domain: HIGH
 Overall confidence: MEDIUM
+```
 
 The values above are illustrative only and represent the target architecture, not the current implemented output.
 
@@ -161,6 +163,7 @@ Evaluation also includes:
 
 ## Repository structure
 
+```text
 admet-ml/
 ├── notebooks/
 │   ├── 01_data_acquisition.ipynb
@@ -174,6 +177,7 @@ admet-ml/
 │
 ├── requirements.txt
 └── README.md
+```
 
 The notebooks currently form the main experimental pipeline.
 
@@ -185,6 +189,7 @@ Reusable modelling, feature-engineering and cheminformatics components will prog
 
 The current project pipeline is organized as follows:
 
+```text
 SMILES
   │
   ▼
@@ -207,6 +212,7 @@ Model evaluation
   │
   ▼
 Interpretability and custom modelling
+```
 
 ---
 
@@ -358,6 +364,7 @@ Beyond obtaining predictive performance, this project aims to investigate questi
 
 The final objective is to move from a single-endpoint regression experiment toward a unified molecular prediction system:
 
+```text
 SMILES
    │
    ▼
@@ -382,6 +389,7 @@ Interpretability
    │
    ▼
 Unified molecule-level ADMET profile
+```
 
 ---
 
