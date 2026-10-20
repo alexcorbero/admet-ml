@@ -19,7 +19,34 @@ def get_pairwise_distances(
     return np.array(distances)
 
 def distance_statistics(
-        distances: np.ndarray) -> dict[str, float]:
+        coords: np.ndarray) -> dict[str, float]:
+
+    distances = get_pairwise_distances(coords)
+    
+    feature_names = [
+        "mean_distance",
+        "std_distance",
+        "min_distance",
+        "max_distance",
+        "range_distance",
+        "10th_distance",
+        "25th_distance",
+        "median_distance",
+        "75th_distance",
+        "90th_distance",
+        "iqr_distance",
+        "rms_distance",
+    ]
+
+    # A molecule with fewer than 2 atoms has no pairwise distances
+    if len(distances) == 0:
+        statistics = {
+            feature: 0.0
+            for feature in feature_names
+        }
+        statistics["n_pairs"] = len(distances)
+        return statistics
+        
 
     statistics = {
         "mean_distance": np.mean(distances),
@@ -38,10 +65,8 @@ def distance_statistics(
         "iqr_distance": np.percentile(distances, 75) - np.percentile(distances, 25),
         
         "rms_distance": np.sqrt(np.mean(distances**2)),
-        "cv_distance": np.std(distances) / np.mean(distances),
 
-        "skew_distance": skew(distances),
-        "kurtosis_distance": kurtosis(distances),
+        "n_pairs": len(distances),
     }
 
     return statistics

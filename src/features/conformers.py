@@ -4,55 +4,37 @@ from rdkit.Chem import AllChem
 
 def generate_conformers(
     mol: Chem.Mol,
-    n_conformers: int = 10,
+    n_conformers: int = 5,
     random_seed: int = 42,
-    prune_rms_thresh: float = 0.5,) -> Chem.Mol:
-    
-    """
-    Generate 3D conformers for an RDKit molecule using ETKDG.
+    prune_rms_thresh: float = 0.5,
+) -> tuple[Chem.Mol, list[int]]:
 
-    Parameters
-    ----------
-    mol : Chem.Mol
-    Input RDKit molecule.
-
-    n_conformers : int, default=10
-        Maximum number of conformers to generate.
-
-    random_seed : int, default=42
-        Random seed for reproducibility.
-
-    prune_rms_thresh : float, default=0.5
-        RMSD threshold used to discard similar conformers.
-
-    Returns
-    -------
-    Chem.Mol
-        Copy of the molecule containing explicit hydrogens
-        and generated 3D conformers.
-    """
-    mol = Chem.AddHs(mol)
+    mol = Chem.AddHs(Chem.Mol(mol))
 
     params = AllChem.ETKDGv3()
     params.randomSeed = random_seed
     params.pruneRmsThresh = prune_rms_thresh
+    params.numThreads = 0
 
-    conformer_ids = AllChem.EmbedMultipleConfs(
-        mol,
-        numConfs=n_conformers,
-        params=params,
+    conf_ids = list(
+        AllChem.EmbedMultipleConfs(
+            mol,
+            numConfs=n_conformers,
+            params=params,
+        )
     )
 
-    if len(conformer_ids) == 0:
+    if not conf_ids:
         raise ValueError("No conformers could be generated.")
 
-    return mol
+    return mol, conf_ids
 
 
 def optimize_conformers(
     mol: Chem.Mol,
     force_field: str = "MMFF",
-    max_iters: int = 500,) -> list[tuple[int, float]]:
+    max_iters: int = 200,
+    num_threads: int = 0) -> list[tuple[int, float]]:
     """
     Optimize all conformers and calculate their energies.
 
@@ -64,17 +46,17 @@ def optimize_conformers(
     force_field : {"MMFF", "UFF"}, default="MMFF"
         Force field used for geometry optimization.
 
-    max_iters : int, default=500
+    max_iters : int, default=200
         Maximum number of optimization iterations.
+
+    num_threads : int, default=0
+        Number of threads used by RDKit.
+        0 means use all available threads.
 
     Returns
     -------
     list of tuple
-        Tuples containing:
-
-        (convergence_status, energy)
-
-    for each conformer.
+        (convergence_status, energy) for each conformer.
     """
 
     force_field = force_field.upper()
@@ -87,6 +69,7 @@ def optimize_conformers(
 
         results = AllChem.MMFFOptimizeMoleculeConfs(
             mol,
+            numThreads=num_threads,
             maxIters=max_iters,
         )
 
@@ -94,10 +77,11 @@ def optimize_conformers(
         if not AllChem.UFFHasAllMoleculeParams(mol):
             raise ValueError(
                 "UFF parameters are not available for this molecule."
-        )
+            )
 
         results = AllChem.UFFOptimizeMoleculeConfs(
             mol,
+            numThreads=num_threads,
             maxIters=max_iters,
         )
 
@@ -106,8 +90,7 @@ def optimize_conformers(
             "force_field must be either 'MMFF' or 'UFF'."
         )
 
-    return results
-
+    return list(results)
 
 def get_conformer_energies(
     optimization_results: list[tuple[int, float]],) -> list[float]:
