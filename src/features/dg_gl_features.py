@@ -49,6 +49,7 @@ DEFAULT_ELEMENTS = (
     "Cl",
     "Br",
     "I",
+    "Na",
 )
 
 DEFAULT_OTHER_LABEL = "Other"
