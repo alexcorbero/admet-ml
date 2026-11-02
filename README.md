@@ -90,53 +90,67 @@ The values above are illustrative only and represent the target architecture, no
 
 ## Current milestone: aqueous solubility
 
-The first stage of the project uses the **Therapeutics Data Commons (TDC)** ADMET benchmark `Solubility_AqSolDB`.
+The first stage of the project focuses on predicting **aqueous solubility** using the Therapeutics Data Commons (TDC) ADMET benchmark **`Solubility_AqSolDB`**.
 
-The current workflow investigates molecular representations and classical machine-learning models for predicting experimental aqueous solubility from SMILES.
+The current workflow investigates how different molecular representations affect predictive performance, ranging from conventional physicochemical descriptors and molecular fingerprints to increasingly rich **3D geometric and differential-geometric representations** derived from molecular conformers.
 
-A major emphasis is placed on realistic validation: molecular models are evaluated using scaffold-aware splits rather than relying only on random train/test partitions.
+Classical machine-learning models, currently centered on **XGBoost**, are used to evaluate the predictive information captured by each representation before moving toward learned geometric models such as graph neural networks.
 
+Particular emphasis is placed on **realistic molecular generalization**. Model performance is therefore evaluated using **scaffold-aware data splits**, which separate structurally distinct molecular scaffolds between training and validation sets and provide a more demanding assessment than conventional random train/test partitioning.
 ---
 
 ## Molecular representations
 
-Current experiments include:
+Current experiments cover a progressively richer set of molecular representations:
 
-- physicochemical descriptors inspired by Lipinski / Rule of Five;
-- ESOL-related descriptors;
+- physicochemical descriptors inspired by Lipinski's Rule of Five and ESOL;
 - extended molecular descriptor sets;
-- MACCS structural keys;
-- Morgan fingerprints;
-- combinations of descriptors and fingerprints.
+- MACCS structural keys and Morgan fingerprints;
+- combinations of molecular descriptors and fingerprints;
+- conformer-derived 3D shape descriptors;
+- pairwise atomic-distance statistics;
+- element-resolved radial and multiscale density representations;
+- differential-geometric representations based on molecular density fields, including mean and Gaussian curvature;
+- element-resolved multiscale curvature representations inspired by differential geometry-based geometric learning (DG-GL).
 
-Future experiments will investigate:
+These experiments are designed to evaluate how progressively incorporating **molecular structure, three-dimensional geometry, and local geometric information** affects aqueous-solubility prediction.
 
-- selected 3D molecular descriptors;
-- graph-based molecular representations;
-- graph neural networks.
+Future work will investigate **learned geometric representations**, including graph neural networks in which atoms are represented as nodes, molecular and spatial relationships as edges, and conformer-derived density and curvature information can be incorporated as local atomic features. This will enable direct comparison between manually engineered geometric representations and representations learned from molecular graphs and 3D conformers.
 
----
+
+## Geometric representation progression
+
+The geometric component of the project follows a staged progression from conventional molecular representations to increasingly rich descriptions of three-dimensional molecular structure.
+
+Each stage is designed to isolate the contribution of additional geometric information while maintaining a clear comparison with the preceding representations.
+
+| Stage | Representation | Purpose |
+|---|---|---|
+| **G0** | Conventional descriptors and molecular fingerprints | Non-geometric baseline |
+| **G1** | RDKit 3D shape descriptors | Computationally inexpensive 3D baseline |
+| **G2** | Pairwise atomic-distance statistics | Rotation- and translation-invariant geometric baseline |
+| **G3** | Element-pair radial basis features | Local distance-based representation inspired by continuous-filter molecular models |
+| **G4** | Element-resolved multiscale density fields | Continuous representation of the local molecular environment and bridge to differential geometry |
+| **G5** | Mean and Gaussian curvature summaries | Differential-geometric characterization of molecular density fields |
+| **G6** | Element-resolved multiscale curvature | DG-GL-inspired representation of element-specific geometric interactions |
+| **G7** | Geometric graph neural network | Learned geometric representation operating directly on molecular conformers |
+
+Stages **G0–G6** are currently evaluated using the same XGBoost modelling framework so that differences in predictive performance can be attributed primarily to the molecular representation.
+
+**G7** represents a change in modelling paradigm: instead of aggregating geometric information into a fixed-length molecular feature vector, a geometric neural network will operate directly on the three-dimensional molecular graph and learn how local atomic, spatial, density, and differential-geometric information should be combined.
+
 
 ## Models
 
-The initial modelling stage includes:
+The current modelling stage uses **XGBoost regression** as the main predictive model.
 
-- `DummyRegressor` as a naive baseline;
-- Ridge regression as a linear baseline;
-- Random Forest regression;
-- Gradient Boosting regression.
+At this stage, the objective is not to compare different machine-learning algorithms, but to use a consistent and strong supervised-learning model to evaluate the information captured by the different molecular representations. Keeping the predictive model fixed makes it easier to attribute changes in performance to the representation itself rather than to differences between modelling algorithms.
 
-The next major milestone is a **custom implementation of Gradient Boosting**, using regression trees as weak learners.
+XGBoost is therefore used to compare representations ranging from conventional 2D molecular descriptors and fingerprints to increasingly rich **3D geometric and differential-geometric features** derived from molecular conformers.
 
-This implementation will be used both as a learning exercise and as a basis for studying problem-specific extensions such as:
+The next major modelling milestone will be the introduction of a **geometric neural network**. Instead of reducing each molecule to a fixed-length vector of engineered features, the molecular conformer will be represented directly as a three-dimensional graph, with atoms as nodes and chemical and spatial relationships as edges.
 
-- alternative loss functions;
-- stochastic subsampling;
-- early stopping;
-- target-aware weighting;
-- improved handling of sparsely represented solubility regions.
-
----
+This will enable the project to investigate learned geometric representations and to incorporate local conformer-derived information, such as multiscale density and curvature features, directly at the atomic level.
 
 ## Validation strategy
 
@@ -159,7 +173,6 @@ Evaluation also includes:
 - molecule-level failure analysis;
 - stability across scaffold splits.
 
----
 
 ## Repository structure
 
@@ -170,20 +183,45 @@ admet-ml/
 │   ├── 02_data_exploration.ipynb
 │   ├── 03_feature_engineering.ipynb
 │   ├── 04_model_training.ipynb
-│   └── 05_model_evaluation.ipynb
+│   ├── 05_model_evaluation.ipynb
+│   └── 07_geometry_representation.ipynb
 │
 ├── src/
-│   └── __init__.py
+│   ├── __init__.py
+│   │
+│   └── features/
+│       ├── __init__.py
+│       ├── conformers.py
+│       ├── descriptors_3d.py
+│       ├── distance_features.py
+│       ├── radial_features.py
+│       ├── density_features.py
+│       ├── curvature_features.py
+│       └── dg_gl_features.py
 │
 ├── requirements.txt
 └── README.md
 ```
 
+The project separates exploratory and experimental workflows from reusable feature-engineering code.
+
+The `notebooks/` directory contains the main experimental pipeline, from dataset acquisition and exploratory analysis to model training, evaluation, and the investigation of geometric molecular representations.
+
+The `src/features/` package contains reusable components for generating and analysing 3D molecular representations:
+
+- `conformers.py` — generation and handling of molecular conformers;
+- `descriptors_3d.py` — conventional conformer-derived 3D descriptors;
+- `distance_features.py` — pairwise atomic-distance representations;
+- `radial_features.py` — element-resolved radial representations;
+- `density_features.py` — multiscale molecular density fields;
+- `curvature_features.py` — differential-geometric features derived from molecular density fields;
+- `dg_gl_features.py` — element-resolved multiscale curvature representations inspired by DG-GL.
+
+As the project moves toward learned geometric representations, additional modules will be introduced for molecular graph construction, atom- and edge-level geometric features, and geometric neural-network models.
 The notebooks currently form the main experimental pipeline.
 
-Reusable modelling, feature-engineering and cheminformatics components will progressively be moved into `src/` as the project matures.
 
----
+## Workflow
 
 ## Workflow
 
@@ -199,35 +237,43 @@ Data acquisition
 Exploratory data analysis
   │
   ▼
-Molecular feature engineering
+Molecular representation
+  │
+  ├── 2D descriptors / fingerprints
+  │
+  └── 3D conformer generation
+          │
+          ▼
+      Geometric representations
+      G1 → G2 → G3 → G4 → G5 → G6
   │
   ▼
-Baseline model training
+XGBoost representation comparison
   │
   ▼
 Scaffold-aware validation
   │
   ▼
-Model evaluation
+Model and error analysis
   │
   ▼
-Interpretability and custom modelling
+Geometric neural networks (G7)
 ```
-
----
 
 ## Current modelling questions
 
-The current solubility milestone focuses on several questions:
+The current solubility milestone focuses on the following questions:
 
-- How well do classical molecular descriptors and fingerprints generalize to unseen scaffolds?
-- Which molecular representations provide useful predictive signal?
-- How large is the train-validation generalization gap?
-- Do models exhibit systematic bias in extreme solubility regions?
-- Can alternative boosting strategies reduce regression toward the mean?
-- Can a custom Gradient Boosting implementation match or improve standard baselines?
+- How well do conventional 2D molecular descriptors and fingerprints generalize to unseen scaffolds?
+- How much predictive information is added by progressively richer 3D molecular representations?
+- Which geometric features provide complementary signal beyond classical descriptors and fingerprints?
+- Do multiscale density and differential-geometric representations improve aqueous-solubility prediction?
+- How large is the train-validation generalization gap for each molecular representation?
+- Do different representations exhibit systematic bias in poorly represented or extreme solubility regions?
+- Can combining conventional molecular descriptors with geometric representations improve predictive performance?
+- How much of the useful 3D information can be captured through engineered geometric features before moving to learned representations?
+- Can geometric neural networks learn more informative molecular representations directly from 3D molecular graphs and local density or curvature information?
 
----
 
 ## Interpretability
 
@@ -242,8 +288,6 @@ Planned methods include:
 - analysis of model behaviour on high-error compounds.
 
 The objective is not only to obtain accurate predictions, but also to understand which molecular properties drive them.
-
----
 
 ## Applicability domain and uncertainty
 
@@ -262,31 +306,60 @@ Prediction confidence
 
 alongside the ADMET predictions.
 
+
 ## Roadmap
 
-- [x] Acquire the first TDC ADMET benchmark dataset.
+### Aqueous-solubility benchmark
+
+- [x] Acquire the TDC `Solubility_AqSolDB` benchmark dataset.
 - [x] Perform exploratory analysis of AqSolDB.
-- [x] Build descriptor, MACCS and Morgan representations.
-- [x] Establish classical regression baselines.
-- [x] Evaluate models across scaffold-aware splits.
+- [x] Establish scaffold-aware training and validation splits.
+- [x] Build physicochemical descriptor representations.
+- [x] Build MACCS and Morgan fingerprint representations.
+- [x] Evaluate combinations of descriptors and fingerprints.
+- [x] Establish XGBoost as the reference model for representation comparison.
 - [x] Analyse train-validation generalization gaps.
-- [x] Perform residual and error-range analysis.
-- [ ] Implement Gradient Boosting from first principles at the ensemble level.
-- [ ] Add early stopping.
-- [ ] Add stochastic subsampling.
-- [ ] Evaluate alternative loss functions.
-- [ ] Study target-aware weighting strategies.
-- [ ] Add model interpretability with permutation importance.
+- [x] Perform residual and solubility-range error analysis.
+
+### Geometric molecular representations
+
+- [x] Generate and process 3D molecular conformers.
+- [x] Evaluate conventional 3D molecular descriptors.
+- [x] Build pairwise atomic-distance representations.
+- [x] Build element-resolved radial representations.
+- [x] Build multiscale molecular density representations.
+- [x] Develop differential-geometric representations based on molecular density fields.
+- [x] Compute element-resolved mean and Gaussian curvature features.
+- [x] Develop multiscale element-interaction curvature representations inspired by DG-GL.
+- [ ] Evaluate combinations of conventional 2D and geometric representations.
+- [ ] Analyse which geometric feature families provide complementary predictive signal.
+- [ ] Perform feature-importance analysis of the geometric representations.
+
+### Learned geometric representations
+
+- [ ] Represent molecular conformers as 3D molecular graphs.
+- [ ] Build atom-level chemical and geometric node features.
+- [ ] Incorporate spatial and chemical edge information.
+- [ ] Implement a baseline geometric graph neural network.
+- [ ] Incorporate multiscale density information as atom-level features.
+- [ ] Incorporate local differential-geometric information such as density gradients and curvature.
+- [ ] Compare engineered geometric representations with learned geometric representations.
+- [ ] Investigate multiple-conformer molecular representations.
+
+### Model analysis and interpretation
+
+- [ ] Add permutation-based feature importance.
 - [ ] Add SHAP-based interpretation.
-- [ ] Evaluate selected 3D descriptors.
+- [ ] Investigate applicability-domain estimation.
+- [ ] Add prediction-confidence and uncertainty estimates.
+
+### Extension to broader ADMET modelling
+
 - [ ] Add additional ADMET regression endpoints.
 - [ ] Add ADMET classification endpoints.
-- [ ] Introduce graph neural network molecular representations.
-- [ ] Implement applicability-domain estimation.
-- [ ] Add prediction-confidence / uncertainty estimates.
+- [ ] Evaluate transferability of molecular representations across ADMET tasks.
 - [ ] Build a unified molecule-level ADMET prediction interface.
 
----
 
 ## Installation
 
@@ -327,7 +400,6 @@ pip install -r requirements.txt
 pip install PyTDC --no-deps
 ```
 
----
 
 ## Main technologies
 
@@ -343,22 +415,24 @@ The project currently uses:
 - seaborn;
 - Therapeutics Data Commons.
 
----
 
 ## Scientific goals
 
-Beyond obtaining predictive performance, this project aims to investigate questions such as:
+Beyond maximizing predictive performance, this project aims to investigate how molecular representation influences the ability of machine-learning models to generalize across chemical space.
 
-- How well do classical fingerprints generalize to unseen chemical scaffolds?
-- Which molecular representations are most useful for different ADMET endpoints?
-- Can custom loss functions reduce systematic prediction bias?
-- Can rare or extreme target regions be modelled more effectively?
-- How should prediction uncertainty be represented?
-- How should the applicability domain of an ADMET model be defined?
-- When do graph-based representations improve over engineered descriptors and fingerprints?
-- Can mathematically motivated modifications to Gradient Boosting improve generalization?
+The main scientific questions include:
 
----
+- How well do conventional molecular descriptors and fingerprints generalize to unseen chemical scaffolds?
+- How much predictive information is gained by incorporating three-dimensional molecular geometry?
+- Which geometric representations provide complementary information beyond conventional 2D descriptors and fingerprints?
+- Can multiscale molecular density fields and differential-geometric quantities such as curvature capture structural information relevant to ADMET properties?
+- Which geometric scales and element-specific interactions are most informative for aqueous-solubility prediction?
+- When do learned graph-based representations improve over engineered molecular representations?
+- Can geometric neural networks benefit from explicitly incorporating local density and differential-geometric information at the atomic level?
+- How robust are different molecular representations in sparsely populated or extreme regions of the target distribution?
+- How transferable are molecular representations across different ADMET regression and classification endpoints?
+- How should prediction uncertainty and the applicability domain of ADMET models be characterized?
+
 
 ## Long-term goal
 
