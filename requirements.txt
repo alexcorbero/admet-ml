@@ -1,8 +1,16 @@
+# CUDA 12.6 wheels for PyTorch (NVIDIA GPU; requires compatible NVIDIA driver)
+# Adapt cu126 to the target environment if using a different CUDA build.
+--extra-index-url https://download.pytorch.org/whl/cu126
+
 # Core scientific stack
 numpy==1.26.4
 pandas==2.3.3
 scipy==1.17.1
 scikit-learn==1.9.1
+
+# Graph neural networks (GINE / PyTorch Geometric)
+torch==2.12.1+cu126
+torch-geometric==2.8.1
 
 # Cheminformatics
 rdkit==2023.9.6
