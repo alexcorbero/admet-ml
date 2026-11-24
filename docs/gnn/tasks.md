@@ -11,7 +11,7 @@
 
 ## Fase 1. Configuración (`src/gnn/config.py`)
 
-- [ ] **T1.1** Implementar `GraphConfig`.
+- [x] **T1.1** Implementar `GraphConfig`.
 - [ ] **T1.2** Implementar `AtomicFeaturesConfig`.
 - [ ] **T1.3** Implementar `ModelConfig`.
 - [ ] **T1.4** Implementar `TrainingConfig`.
