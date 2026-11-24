@@ -169,7 +169,12 @@ edge_index  [2, E]
 edge_attr   [E, F_edge]
 ```
 
-Responsabilidad: conectividad covalente/radius/hybrid y atributos químicos/geométricos.
+Responsabilidad: conectividad covalente/radius/hybrid y atributos
+químicos/geométricos de arista.
+
+La geometría de arista base utiliza distancia 3D y Gaussian RBF.
+Los kernels exponential/Lorentz pertenecen a las features DG de nodos y no
+forman parte de `edge_attr` en la representación base.
 
 ### `density_features.py`
 

@@ -87,6 +87,7 @@ atom_features
 edge_features
 density_features
 graph_builder
+```
 
 ## 3. Representación del grafo
 
@@ -159,7 +160,7 @@ Requisitos:
 - los enlaces RDKit se conservan en `hybrid`;
 - los vecinos espaciales se determinan por cutoff configurable.
 
-Features de arista posibles:
+Features de arista:
 
 - `is_bonded`;
 - tipo de enlace one-hot;
@@ -167,8 +168,12 @@ Features de arista posibles:
 - conjugación;
 - pertenencia a anillo;
 - distancia 3D;
-- Gaussian RBF;
-- kernel exponential/Lorentz.
+- Gaussian RBF de la distancia.
+
+La representación base de aristas no utiliza kernels exponential/Lorentz.
+
+Los kernels exponential/Lorentz se reservan para las features locales de
+densidad y geometría diferencial de los nodos.
 
 ## 4. Objeto PyTorch Geometric
 
@@ -240,7 +245,7 @@ construcción/verificación de features geométricas, pero no se concatena
 directamente con `x` ni se introduce como coordenadas cartesianas en GINE.
 
 La información 3D llega al modelo mediante features invariantes derivadas
-de la geometría, como distancias, RBF, kernels, densidad y curvatura.
+de la geometría, como distancias, Gaussian RBF, densidad y curvatura.
 
 ## 7. Flujo experimental
 
@@ -380,7 +385,8 @@ El cache debe identificar al menos:
 - política de H;
 - conformero;
 - cutoff;
-- kernel y escalas.
+- configuración RBF de aristas;
+- configuración de densidad/DG, incluidos kernel, orden y escalas cuando estén activados.
 
 Los grafos crudos no incluirán normalización dependiente del split.
 
