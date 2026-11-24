@@ -323,18 +323,19 @@ Salida principal: **tabla comparativa de modelos**.
 
 ## 6. Persistencia
 
+`experiment_id` será el identificador canónico de una configuración experimental G7. Debe utilizarse de forma consistente en todas las rutas de modelos y resultados.
+
+La estructura de persistencia será:
+
 ```text
 data/graphs/aqsoldb/<graph_config_id>/
 ├── graphs.pt
 └── manifest.*
 
-data/models/gnn/<experiment>/<seed>/
+data/models/gnn/<experiment_id>/<seed>/
 ├── config.json
 ├── model.pt
 └── normalizer.*
-
-data/results/gnn/<experiment>/
-└── history_seed_<seed>.csv
 
 data/results/gnn/<experiment_id>/
 ├── history_seed_<seed>.csv
@@ -347,6 +348,20 @@ data/results/comparison/
 ├── model_predictions.csv
 └── paired_seed_differences.csv
 ```
+
+Responsabilidades:
+
+- `graph_config_id` identifica de forma reproducible la configuración utilizada para construir los grafos crudos;
+- `experiment_id` identifica una configuración experimental GNN;
+- `<seed>` identifica una ejecución concreta de entrenamiento dentro del experimento;
+- `model.pt` contiene los pesos del mejor modelo y la metadata mínima necesaria del checkpoint;
+- `config.json` contiene la configuración completa del experimento;
+- `normalizer.*` contiene exclusivamente las estadísticas ajustadas con train para ese seed;
+- `history_seed_<seed>.csv` contiene el historial de entrenamiento por época;
+- `metrics.csv` contiene las métricas resumidas de las ejecuciones del experimento;
+- `train_predictions.csv` y `validation_predictions.csv` contienen las predicciones utilizadas posteriormente por `09_gnn_evaluation.ipynb`.
+
+No se utilizarán alternativamente `<experiment>` y `<experiment_id>`: **`<experiment_id>` es el nombre canónico en toda la documentación y el código**.
 
 ## 7. Esquema común de comparación
 

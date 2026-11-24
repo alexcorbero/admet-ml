@@ -31,14 +31,48 @@ La entrada mínima por molécula será:
 
 Requisitos del conformero:
 
-- generación reproducible;
+- generación reproducible mediante semilla;
 - misma geometría para nodos, aristas y features geométricas;
 - política única de hidrógenos;
 - no añadir, eliminar ni reordenar átomos después de fijar el conformero;
 - rechazar coordenadas no finitas o geometrías degeneradas de forma explícita;
 - contabilizar cualquier molécula excluida.
 
-G7 utilizará inicialmente **un conformero por molécula**.
+### 2.1. Selección del conformero
+
+G7 utilizará inicialmente **un único conformero por molécula**.
+
+El conformero utilizado será el **conformero optimizado de menor energía** entre los conformeros generados con energía válida y finita.
+
+La selección debe conservar explícitamente la correspondencia entre:
+
+```text
+conf_ids[i] ↔ optimization_results[i]
+```
+
+donde `conf_ids[i]` es el identificador real asignado por RDKit al conformero correspondiente.
+
+La función encargada de seleccionar el conformero de menor energía debe devolver el **RDKit `conf_id` real**, no la posición del conformero dentro de la lista de resultados.
+
+Conceptualmente:
+
+```python
+best_position = argmin(energies)
+best_conf_id = conf_ids[best_position]
+```
+
+Todas las operaciones posteriores de G7 deben utilizar ese mismo `best_conf_id`:
+
+- extracción de `pos`;
+- construcción de aristas geométricas;
+- cálculo de distancias;
+- densidad;
+- curvatura;
+- construcción final del grafo.
+
+El `conf_id` seleccionado debe almacenarse en los metadatos del grafo y/o del manifest de generación para permitir reproducir exactamente la representación.
+
+Si no existe ningún conformero con geometría y energía válidas, la molécula se excluye de forma explícita y se registra la causa.
 
 ### Política de hidrógenos
 

@@ -173,7 +173,7 @@ Toda tabla comparativa debe incluir como mínimo:
 
 ## 10. Comparación GNN vs ML clásico
 
-Para comparar con XGBoost/RandomForest:
+Para comparar con XGBoost:
 
 - usar mismos seeds y scaffold splits;
 - verificar `row_id`;

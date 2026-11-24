@@ -4,10 +4,10 @@
 
 ## Fase 0. Preparación
 
-- [ ] **T0.1** Aprobar `spec.md`, `architecture.md`, `tasks.md` y `reglesIA.md`.
-- [ ] **T0.2** Crear la rama de implementación G7.
-- [ ] **T0.3** Fijar y documentar la política de hidrógenos.
-- [ ] **T0.4** Verificar PyTorch, PyTorch Geometric, RDKit y dispositivo disponible.
+- [x] **T0.1** Aprobar `spec.md`, `architecture.md`, `tasks.md` y `reglesIA.md`.
+- [x] **T0.2** Crear la rama de implementación G7.
+- [x] **T0.3** Fijar y documentar la política de hidrógenos.
+- [x] **T0.4** Verificar PyTorch, PyTorch Geometric, RDKit y dispositivo disponible.
 
 ## Fase 1. Configuración (`src/gnn/config.py`)
 
