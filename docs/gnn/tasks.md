@@ -1,0 +1,152 @@
+# Tareas G7 — Implementación agéntica
+
+> `[ ]` pendiente · `[x]` implementada y verificada.
+
+## Fase 0. Preparación
+
+- [ ] **T0.1** Aprobar `spec.md`, `architecture.md`, `tasks.md` y `reglesIA.md`.
+- [ ] **T0.2** Crear la rama de implementación G7.
+- [ ] **T0.3** Fijar y documentar la política de hidrógenos.
+- [ ] **T0.4** Verificar PyTorch, PyTorch Geometric, RDKit y dispositivo disponible.
+
+## Fase 1. Configuración (`src/gnn/config.py`)
+
+- [ ] **T1.1** Implementar `GraphConfig`.
+- [ ] **T1.2** Implementar `AtomicFeaturesConfig`.
+- [ ] **T1.3** Implementar `ModelConfig`.
+- [ ] **T1.4** Implementar `TrainingConfig`.
+- [ ] **T1.5** Implementar `GNNConfig` y serialización.
+- [ ] **T1.6** Añadir validaciones y tests.
+
+## Fase 2. Features de nodo (`src/gnn/atom_features.py`)
+
+- [ ] **T2.1** Definir esquema y nombres de features.
+- [ ] **T2.2** Implementar hibridación one-hot.
+- [ ] **T2.3** Implementar quiralidad/CIP.
+- [ ] **T2.4** Implementar carga, grado, H, masa, aromaticidad y anillo.
+- [ ] **T2.5** Implementar `build_atom_features()`.
+- [ ] **T2.6** Probar H explícitos, aromaticidad, quiralidad y elementos raros.
+
+## Fase 3. Aristas (`src/gnn/edge_features.py`)
+
+- [ ] **T3.1** Implementar enlaces RDKit.
+- [ ] **T3.2** Implementar vecinos por cutoff.
+- [ ] **T3.3** Implementar modo `hybrid`.
+- [ ] **T3.4** Implementar aristas bidireccionales sin duplicados/self-loops.
+- [ ] **T3.5** Implementar atributos químicos de enlace.
+- [ ] **T3.6** Implementar distancia y Gaussian RBF.
+- [ ] **T3.7** Implementar kernels exponential/Lorentz.
+- [ ] **T3.8** Implementar naming de `edge_attr`.
+- [ ] **T3.9** Añadir tests de los tres modos.
+
+## Fase 4. Densidad y curvatura (`src/gnn/density_features.py`)
+
+- [ ] **T4.1** Definir canales y nombres.
+- [ ] **T4.2** Reutilizar derivadas analíticas de G6.
+- [ ] **T4.3** Implementar densidad por átomo.
+- [ ] **T4.4** Implementar densidad por carga opcional.
+- [ ] **T4.5** Implementar `H`, `K`, `kappa_min`, `kappa_max`.
+- [ ] **T4.6** Implementar máscaras de validez.
+- [ ] **T4.7** Implementar valor neutro para curvatura inválida.
+- [ ] **T4.8** Implementar transformación numérica configurable.
+- [ ] **T4.9** Verificar shapes y ausencia de NaN/Inf.
+- [ ] **T4.10** Añadir tests de `Other`, canales ausentes y singularidades.
+
+## Fase 5. Grafo (`src/gnn/graph_builder.py`)
+
+- [ ] **T5.1** Implementar nombres de features de grafo.
+- [ ] **T5.2** Implementar `build_graph()`.
+- [ ] **T5.3** Añadir target y metadata.
+- [ ] **T5.4** Validar shapes, dtypes y finitud.
+- [ ] **T5.5** Verificar batching PyG.
+- [ ] **T5.6** Añadir smoke test RDKit → `Data` → batch.
+
+## Fase 6. Dataset y cache (`src/gnn/dataset.py`)
+
+- [ ] **T6.1** Definir ID reproducible de configuración.
+- [ ] **T6.2** Implementar generación de grafos del dataset.
+- [ ] **T6.3** Registrar éxitos/fallos.
+- [ ] **T6.4** Implementar persistencia/carga.
+- [ ] **T6.5** Detectar caches incompatibles.
+- [ ] **T6.6** Implementar subsets por IDs de split.
+- [ ] **T6.7** Verificar que el cache contiene grafos crudos.
+
+## Fase 7. Normalización (`src/gnn/normalizer.py`)
+
+- [ ] **T7.1** Definir columnas escalables.
+- [ ] **T7.2** Implementar `fit(train_graphs)`.
+- [ ] **T7.3** Respetar máscaras de curvatura.
+- [ ] **T7.4** Implementar transformaciones.
+- [ ] **T7.5** Implementar guardado/carga de estadísticas.
+- [ ] **T7.6** Probar ausencia de leakage.
+- [ ] **T7.7** Verificar valores inválidos neutros.
+
+## Fase 8. Modelo (`src/models/gnn.py`)
+
+- [ ] **T8.1** Implementar embedding atómico.
+- [ ] **T8.2** Implementar encoder de nodos.
+- [ ] **T8.3** Implementar message passing GINE.
+- [ ] **T8.4** Apilar capas con norm/activación/dropout.
+- [ ] **T8.5** Implementar residuals.
+- [ ] **T8.6** Implementar pooling.
+- [ ] **T8.7** Implementar readout.
+- [ ] **T8.8** Implementar `encode()`.
+- [ ] **T8.9** Probar forward/backward.
+- [ ] **T8.10** Verificar shapes y parámetros.
+
+## Fase 9. `07_gnn_graph_generation.ipynb`
+
+- [ ] **T9.1** Cargar datos/conformeros y configuración.
+- [ ] **T9.2** Mostrar un grafo de ejemplo.
+- [ ] **T9.3** Mostrar esquema de features.
+- [ ] **T9.4** Generar grafos crudos.
+- [ ] **T9.5** Registrar fallos.
+- [ ] **T9.6** Guardar grafos, metadata y config ID.
+- [ ] **T9.7** Verificar cache incompatible.
+- [ ] **T9.8** Ejecutar `Restart & Run All` en smoke.
+
+## Fase 10. `08_gnn_training.ipynb`
+
+- [ ] **T10.1** Cargar grafos y scaffold splits.
+- [ ] **T10.2** Ajustar normalizer con train.
+- [ ] **T10.3** Crear DataLoaders.
+- [ ] **T10.4** Fijar seeds/dispositivo.
+- [ ] **T10.5** Configurar Huber/MAE/MSE.
+- [ ] **T10.6** Implementar training loop con AdamW.
+- [ ] **T10.7** Implementar validation sin gradientes.
+- [ ] **T10.8** Aplicar gradient clipping.
+- [ ] **T10.9** Implementar early stopping por validation MAE.
+- [ ] **T10.10** Guardar config, normalizer, best checkpoint e historial.
+- [ ] **T10.11** Restaurar mejores pesos.
+- [ ] **T10.12** Ejecutar smoke training.
+- [ ] **T10.13** Ejecutar `Restart & Run All` en smoke.
+
+## Fase 11. `09_gnn_evaluation.ipynb`
+
+- [ ] **T11.1** Cargar best checkpoint y normalizer por seed.
+- [ ] **T11.2** Predecir train y validation.
+- [ ] **T11.3** Calcular MAE, RMSE y R².
+- [ ] **T11.4** Registrar `n_samples` y cobertura.
+- [ ] **T11.5** Guardar predicciones y métricas GNN.
+- [ ] **T11.6** Agregar resultados entre seeds.
+- [ ] **T11.7** Cargar resultados XGBoost/RandomForest.
+- [ ] **T11.8** Adaptarlos al esquema común.
+- [ ] **T11.9** Comparar solo seeds/splits compatibles.
+- [ ] **T11.10** Comparar también sobre `row_id` comunes si cambia la cobertura.
+- [ ] **T11.11** Calcular diferencias emparejadas por seed.
+- [ ] **T11.12** Analizar generalization gap y residuals.
+- [ ] **T11.13** Guardar `data/results/comparison/`.
+- [ ] **T11.14** Ejecutar `Restart & Run All`.
+
+## Fase 12. Invariancias e integración
+
+- [ ] **T12.1** Invariancia a traslación.
+- [ ] **T12.2** Invariancia a rotación.
+- [ ] **T12.3** Invariancia a permutación coherente.
+- [ ] **T12.4** Verificar aristas bidireccionales/sin duplicados.
+- [ ] **T12.5** Verificar roundtrip checkpoint + normalizer.
+- [ ] **T12.6** Ejecutar toda la suite GNN.
+
+## Cierre de tarea
+
+Una tarea pasa a `[x]` solo si cumple el contrato, pasan sus verificaciones, no rompe tareas previas y el cambio queda resumido.
