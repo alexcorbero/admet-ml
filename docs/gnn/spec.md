@@ -40,6 +40,20 @@ Requisitos del conformero:
 
 G7 utilizará inicialmente **un conformero por molécula**.
 
+### Política de hidrógenos
+
+Todos los módulos G7 reciben la misma molécula RDKit con hidrógenos explícitos:
+
+```text
+Chem.AddHs()
+    ↓
+conformer
+    ↓
+atom_features
+edge_features
+density_features
+graph_builder
+
 ## 3. Representación del grafo
 
 ### 3.1. Nodos
@@ -187,6 +201,13 @@ encode(data) -> graph_embedding
 forward(data) -> prediction
 ```
 
+`pos` se conserva en `Data` como geometría molecular y para la
+construcción/verificación de features geométricas, pero no se concatena
+directamente con `x` ni se introduce como coordenadas cartesianas en GINE.
+
+La información 3D llega al modelo mediante features invariantes derivadas
+de la geometría, como distancias, RBF, kernels, densidad y curvatura.
+
 ## 7. Flujo experimental
 
 ### `07_gnn_graph_generation.ipynb`
@@ -329,16 +350,25 @@ El cache debe identificar al menos:
 
 Los grafos crudos no incluirán normalización dependiente del split.
 
-Checkpoint mínimo:
+Artefactos mínimos de una ejecución:
 
-```text
-config
-model state
-normalizer
-best epoch
-training history
-split/seed
-```
+- model.pt
+- config.json
+- normalizer.*
+- history.csv
+- metadata del split/seed
+
+model.pt contiene:
+- model_state_dict
+- best_epoch
+- best_validation_mae
+
+history.csv contiene:
+- epoch
+- train_loss
+- train_mae
+- validation_loss
+- validation_mae
 
 ## 12. Criterios de aceptación
 

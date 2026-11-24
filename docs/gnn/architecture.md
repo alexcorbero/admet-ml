@@ -98,7 +98,14 @@ atom_features ──┐
 edge_features ──┼───────────► graph_builder ─► dataset
 density_features┘
 
-graph_builder + normalizer ─► models/gnn.py
+graph_builder ─► Data
+normalizer ───► Data normalizado
+                    │
+                    ▼
+               DataLoader
+                    │
+                    ▼
+               models/gnn.py
 ```
 
 Reglas:
@@ -107,6 +114,7 @@ Reglas:
 - los módulos de features no dependen del modelo;
 - `graph_builder.py` no entrena ni normaliza;
 - `models/gnn.py` no usa RDKit;
+- `models/gnn.py` no importa `graph_builder.py` ni `normalizer.py`; recibe objetos Data/Batch ya construidos y, cuando corresponda, normalizados.
 - 07 no entrena;
 - 08 no realiza la comparación final;
 - 09 no modifica pesos ni normalizers.
@@ -256,6 +264,15 @@ prediction
 
 GINE será el operador inicial de message passing.
 
+El modelo consume:
+- z
+- x
+- edge_index
+- edge_attr
+- batch
+
+`pos` no forma parte del input directo de GINE.
+
 ## 5. Notebooks
 
 ### `07_gnn_graph_generation.ipynb`
@@ -296,7 +313,7 @@ Debe:
 2. generar predicciones de train/validation;
 3. calcular MAE, RMSE y R²;
 4. agregar resultados entre seeds;
-5. cargar resultados XGBoost/RandomForest;
+5. cargar resultados XGBoost;
 6. armonizar esquemas;
 7. comparar seed a seed;
 8. controlar cobertura;
@@ -311,10 +328,13 @@ data/graphs/aqsoldb/<graph_config_id>/
 ├── graphs.pt
 └── manifest.*
 
-data/models/gnn/<experiment_id>/<seed>/
+data/models/gnn/<experiment>/<seed>/
 ├── config.json
 ├── model.pt
 └── normalizer.*
+
+data/results/gnn/<experiment>/
+└── history_seed_<seed>.csv
 
 data/results/gnn/<experiment_id>/
 ├── history_seed_<seed>.csv

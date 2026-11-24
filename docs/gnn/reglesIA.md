@@ -103,6 +103,7 @@ No es válido:
 - ignorar `edge_index`;
 - recibir `edge_attr` pero no usarlo;
 - hacer pooling antes del message passing.
+- concatenar `data.pos` con `data.x` en la arquitectura GINE;
 
 El encoder debe:
 
@@ -113,6 +114,7 @@ El encoder debe:
 - obtener embeddings atómicos;
 - aplicar pooling;
 - exponer `encode()`.
+- la geometría 3D debe entrar mediante atributos invariantes derivados.
 
 Cualquier cambio de GINE requiere actualizar antes la arquitectura.
 

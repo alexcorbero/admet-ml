@@ -129,7 +129,7 @@
 - [ ] **T11.4** Registrar `n_samples` y cobertura.
 - [ ] **T11.5** Guardar predicciones y métricas GNN.
 - [ ] **T11.6** Agregar resultados entre seeds.
-- [ ] **T11.7** Cargar resultados XGBoost/RandomForest.
+- [ ] **T11.7** Cargar resultados XGBoost.
 - [ ] **T11.8** Adaptarlos al esquema común.
 - [ ] **T11.9** Comparar solo seeds/splits compatibles.
 - [ ] **T11.10** Comparar también sobre `row_id` comunes si cambia la cobertura.

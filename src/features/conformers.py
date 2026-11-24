@@ -105,19 +105,20 @@ def get_conformer_energies(
 
 
 def get_lowest_energy_conformer(
-    optimization_results: list[tuple[int, float]],) -> int:
-    """
-    Return the index of the lowest-energy conformer.
-    """
+    conf_ids: list[int],
+    optimization_results: list[tuple[int, float]],
+) -> int:
+    if len(conf_ids) != len(optimization_results):
+        raise ValueError(
+            "conf_ids and optimization_results must have the same length."
+        )
 
-    energies = get_conformer_energies(
-        optimization_results
+    best_position = min(
+        range(len(optimization_results)),
+        key=lambda i: optimization_results[i][1],
     )
 
-    return min(
-        range(len(energies)),
-        key=energies.__getitem__,
-    )
+    return int(conf_ids[best_position])
 
 def remove_hydrogens(mol: Chem.Mol) -> Chem.Mol:
     """
