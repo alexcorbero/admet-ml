@@ -63,6 +63,8 @@ def build_radius_edge_index(
         conf_id, (int, np.integer)
     ):
         raise ValueError("conf_id must be an integer RDKit conformer ID.")
+    if int(conf_id) < 0:
+        raise ValueError("conf_id must be a non-negative RDKit conformer ID.")
     if isinstance(cutoff, (bool, np.bool_)):
         raise ValueError("cutoff must be a finite positive number.")
     try:

@@ -184,6 +184,17 @@ class RadiusEdgeIndexTests(unittest.TestCase):
             with self.subTest(conf_id=conf_id), self.assertRaises(ValueError):
                 build_radius_edge_index(molecule, conf_id, cutoff=2.0)
 
+    def test_negative_conf_id_is_rejected_when_conformers_exist(self):
+        molecule, valid_conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            conf_id=5,
+        )
+        self.assertEqual(valid_conf_id, 5)
+
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            build_radius_edge_index(molecule, -1, cutoff=2.0)
+
     def test_non_finite_conformer_coordinates_are_rejected(self):
         molecule, conf_id = molecule_with_conformer(
             "CC",
