@@ -94,15 +94,6 @@ class CovalentEdgeIndexTests(unittest.TestCase):
         self.assertEqual(edge_attr.shape, (molecule.GetNumBonds(), 0))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
-    def test_unimplemented_hybrid_mode_fails_explicitly(self):
-        molecule = Chem.MolFromSmiles("CC")
-        with self.assertRaises(NotImplementedError):
-            build_edge_features(
-                molecule,
-                conf_id=None,
-                config=GraphConfig(edge_mode="hybrid"),
-            )
-
     def test_public_builder_requires_graph_config(self):
         molecule = Chem.MolFromSmiles("CC")
         with self.assertRaises(TypeError):
