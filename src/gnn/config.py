@@ -226,7 +226,7 @@ class AtomicFeaturesConfig:
     dg_kernel_configs: tuple[tuple[float, float], ...] = field(
         default=_DG_KERNEL_CONFIGS_UNSET  # type: ignore[arg-type]
     )
-    density_types: tuple[str, ...] = ("number")
+    density_types: tuple[str, ...] = ("number",)
     density_elements: tuple[str, ...] = field(
         default_factory=lambda: _DEFAULT_DENSITY_ELEMENTS
     )

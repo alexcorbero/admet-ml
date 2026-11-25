@@ -6,7 +6,6 @@ construction, normalization, and model execution belong to later tasks.
 """
 
 import json
-import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -66,6 +65,8 @@ class GraphConfigTests(unittest.TestCase):
 class AtomicFeaturesConfigTests(unittest.TestCase):
     def test_defaults_define_g7_a(self):
         config = AtomicFeaturesConfig()
+        self.assertEqual(config.density_types, ("number",))
+        self.assertIsInstance(config.density_types, tuple)
         self.assertFalse(config.density_enabled)
         self.assertFalse(config.curvature_enabled)
         self.assertTrue(config.include_chirality)
