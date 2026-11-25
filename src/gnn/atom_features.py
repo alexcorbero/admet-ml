@@ -1,14 +1,15 @@
-"""Schema and focused encoders for local chemical atom features.
+"""Schema, builder, and focused encoders for local chemical atom features.
 
-This module defines the column contract for x_chem and implements scalar
-atom properties and categorical encoders. Atomic number is kept separately
-in z. The complete build_atom_features API belongs to a subsequent task.
+Atomic number is kept separately in z; x_chem follows the ordered schema
+returned by get_atom_feature_names().
 """
 
 from __future__ import annotations
 
 from rdkit import Chem
 from rdkit.Chem.rdchem import Atom as RDKitAtom
+
+import numpy as np
 
 from .config import AtomicFeaturesConfig
 
@@ -279,3 +280,70 @@ def get_cip_one_hot(
         for value in config.cip_types
     )
 
+
+
+def build_atom_features(
+    mol: Chem.Mol,
+    config: AtomicFeaturesConfig | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build atomic numbers and the ordered chemical feature matrix.
+
+    Atoms are processed in their existing RDKit index order. The returned
+    arrays therefore preserve the correspondence between z[i], x_chem[i],
+    and mol.GetAtomWithIdx(i).
+
+    The molecule is consumed as supplied: this function does not add,
+    remove, or reorder atoms or hydrogens. Callers must apply the shared
+    G7 hydrogen policy before invoking it.
+
+    Parameters
+    ----------
+    mol:
+        RDKit molecule whose atoms are to be encoded.
+    config:
+        Optional atom-feature configuration. When omitted, the default
+        AtomicFeaturesConfig is used.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        z with shape [N] and dtype int64, followed by x_chem with shape
+        [N, F_chem] and dtype float32. The columns of x_chem follow
+        get_atom_feature_names() exactly.
+    """
+    if not isinstance(mol, Chem.Mol):
+        raise TypeError("mol must be an RDKit Mol instance.")
+
+    # Resolve/validate the configuration and obtain the authoritative width.
+    feature_names = get_atom_feature_names(config)
+    if config is None:
+        config = AtomicFeaturesConfig()
+
+    num_atoms = mol.GetNumAtoms()
+    num_features = len(feature_names)
+    z = np.empty((num_atoms,), dtype=np.int64)
+    x_chem = np.empty((num_atoms, num_features), dtype=np.float32)
+
+    for atom_index in range(num_atoms):
+        atom = mol.GetAtomWithIdx(atom_index)
+        features = (
+            get_atom_scalar_features(atom, config)
+            + get_hybridization_one_hot(atom, config)
+            + get_chirality_one_hot(atom, config)
+            + get_cip_one_hot(atom, config)
+        )
+
+        if len(features) != num_features:
+            raise RuntimeError(
+                "Atom feature encoders returned a row whose width does not "
+                "match get_atom_feature_names()."
+            )
+
+        z[atom_index] = atom.GetAtomicNum()
+        if num_features:
+            x_chem[atom_index] = features
+
+    if not np.isfinite(x_chem).all():
+        raise ValueError("x_chem contains NaN or infinite values.")
+
+    return z, x_chem
