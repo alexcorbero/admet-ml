@@ -1,14 +1,20 @@
 """Configuration objects for the G7 molecular graph pipeline.
 
-This module defines lightweight configuration for graph connectivity,
-chemical atom features, density, differential geometry, and model and training settings. It intentionally depends only on the Python
+This module defines lightweight, validated configuration objects for graph
+connectivity, chemical atom features, density, differential geometry,
+model architecture, and training. GNNConfig composes these objects and
+provides JSON serialization. It intentionally depends only on the Python
 standard library and does not import RDKit, PyTorch, or PyTorch Geometric.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field, fields
+import json
 import math
+from pathlib import Path
+from typing import Any
 
 
 _EDGE_MODES = {"covalent", "radius", "hybrid"}
@@ -434,3 +440,121 @@ class TrainingConfig:
         object.__setattr__(self, "gradient_clip_norm", gradient_clip_norm)
         for field_name, value in numeric_values.items():
             object.__setattr__(self, field_name, value)
+
+
+def _json_compatible(value: Any) -> Any:
+    """Convert dataclass-derived values into JSON-native containers."""
+    if isinstance(value, dict):
+        return {key: _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_compatible(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True)
+class GNNConfig:
+    """Complete, validated composition of the four G7 configuration objects.
+
+    This object contains configuration only. Run metadata, normalizer
+    statistics, checkpoints, and training history remain separate artifacts.
+    """
+
+    graph: GraphConfig = field(default_factory=GraphConfig)
+    atomic_features: AtomicFeaturesConfig = field(default_factory=AtomicFeaturesConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+
+    def __post_init__(self) -> None:
+        expected_types = (
+            ("graph", GraphConfig),
+            ("atomic_features", AtomicFeaturesConfig),
+            ("model", ModelConfig),
+            ("training", TrainingConfig),
+        )
+        for field_name, expected_type in expected_types:
+            if not isinstance(getattr(self, field_name), expected_type):
+                raise ValueError(
+                    f"{field_name} must be an instance of {expected_type.__name__}."
+                )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the complete configuration using JSON-native containers."""
+        return _json_compatible(asdict(self))
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> GNNConfig:
+        """Build a validated configuration from a complete mapping."""
+        if not isinstance(data, Mapping):
+            raise ValueError("GNN configuration must be a mapping.")
+
+        config_types = {
+            "graph": GraphConfig,
+            "atomic_features": AtomicFeaturesConfig,
+            "model": ModelConfig,
+            "training": TrainingConfig,
+        }
+        supplied_sections = set(data)
+        expected_sections = set(config_types)
+        if supplied_sections != expected_sections:
+            missing = sorted(str(key) for key in expected_sections - supplied_sections)
+            unexpected = sorted(str(key) for key in supplied_sections - expected_sections)
+            raise ValueError(
+                "GNN configuration sections do not match the schema; "
+                f"missing={missing}, unexpected={unexpected}."
+            )
+
+        nested_configs: dict[str, Any] = {}
+        for section_name, config_type in config_types.items():
+            section_data = data[section_name]
+            if not isinstance(section_data, Mapping):
+                raise ValueError(f"{section_name} must be a mapping.")
+
+            expected_fields = {item.name for item in fields(config_type)}
+            supplied_fields = set(section_data)
+            if supplied_fields != expected_fields:
+                missing = sorted(str(key) for key in expected_fields - supplied_fields)
+                unexpected = sorted(str(key) for key in supplied_fields - expected_fields)
+                raise ValueError(
+                    f"{section_name} fields do not match the schema; "
+                    f"missing={missing}, unexpected={unexpected}."
+                )
+            try:
+                nested_configs[section_name] = config_type(**dict(section_data))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Invalid {section_name} configuration: {exc}"
+                ) from exc
+
+        return cls(**nested_configs)
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        """Serialize the complete configuration as deterministic JSON."""
+        return json.dumps(
+            self.to_dict(),
+            indent=indent,
+            sort_keys=True,
+            allow_nan=False,
+        )
+
+    @classmethod
+    def from_json(cls, content: str) -> GNNConfig:
+        """Deserialize and validate a JSON configuration string."""
+        if not isinstance(content, str):
+            raise ValueError("JSON configuration content must be a string.")
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Invalid JSON configuration.") from exc
+        return cls.from_dict(data)
+
+    def save_json(self, path: str | Path) -> Path:
+        """Write the complete configuration to a UTF-8 JSON file."""
+        target = Path(path)
+        target.write_text(self.to_json() + "\n", encoding="utf-8")
+        return target
+
+    @classmethod
+    def load_json(cls, path: str | Path) -> GNNConfig:
+        """Load and validate a configuration from a UTF-8 JSON file."""
+        return cls.from_json(Path(path).read_text(encoding="utf-8"))
+
