@@ -310,3 +310,52 @@ class AtomicFeaturesConfig:
         object.__setattr__(self, "density_elements", density_elements)
         object.__setattr__(self, "other_label", other_label)
         object.__setattr__(self, "curvature_neutral_value", curvature_neutral_value)
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    """Validated architecture settings for the G7 molecular GNN.
+
+    This config describes model dimensions and high-level architecture
+    choices only. It does not construct layers or depend on a tensor/GNN
+    framework; model implementation belongs to the model phase.
+    """
+
+    hidden_dim: int = 128
+    num_message_passing_layers: int = 4
+    dropout: float = 0.1
+    residual_connections: bool = True
+    pooling: str = "mean"
+    readout_hidden_dim: int = 128
+
+    def __post_init__(self) -> None:
+        integer_fields = (
+            "hidden_dim",
+            "num_message_passing_layers",
+            "readout_hidden_dim",
+        )
+        for field_name in integer_fields:
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{field_name} must be a positive integer.")
+
+        if not isinstance(self.dropout, (int, float)) or isinstance(self.dropout, bool):
+            raise ValueError("dropout must be a finite number in [0, 1).")
+        dropout = float(self.dropout)
+        if not math.isfinite(dropout) or not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be a finite number in [0, 1).")
+
+        if not isinstance(self.residual_connections, bool):
+            raise ValueError("residual_connections must be a boolean.")
+
+        if not isinstance(self.pooling, str):
+            raise ValueError("pooling must be a string.")
+        pooling = self.pooling.lower()
+        allowed_pooling = {"sum", "mean", "max", "mean_max"}
+        if pooling not in allowed_pooling:
+            raise ValueError(
+                f"pooling must be one of {sorted(allowed_pooling)}; got {self.pooling!r}."
+            )
+
+        object.__setattr__(self, "dropout", dropout)
+        object.__setattr__(self, "pooling", pooling)
