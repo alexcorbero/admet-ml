@@ -1,8 +1,7 @@
 """Configuration objects for the G7 molecular graph pipeline.
 
 This module defines lightweight configuration for graph connectivity,
-chemical atom features, density, differential geometry, and (in later tasks)
-model and training settings. It intentionally depends only on the Python
+chemical atom features, density, differential geometry, and model and training settings. It intentionally depends only on the Python
 standard library and does not import RDKit, PyTorch, or PyTorch Geometric.
 """
 
@@ -359,3 +358,79 @@ class ModelConfig:
 
         object.__setattr__(self, "dropout", dropout)
         object.__setattr__(self, "pooling", pooling)
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    """Validated hyperparameters for the G7 training procedure.
+
+    The documented training protocol fixes AdamW as the optimizer and
+    validation MAE as the checkpoint-selection metric. The run seed and
+    device are supplied by the execution context.
+    """
+
+    batch_size: int = 32
+    max_epochs: int = 200
+    learning_rate: float = 1e-3
+    weight_decay: float = 1e-5
+    loss: str = "huber"
+    huber_delta: float = 1.0
+    early_stopping_patience: int = 20
+    gradient_clip_norm: float | None = None
+
+    def __post_init__(self) -> None:
+        integer_fields = (
+            "batch_size",
+            "max_epochs",
+            "early_stopping_patience",
+        )
+        for field_name in integer_fields:
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{field_name} must be a positive integer.")
+
+        numeric_fields = ("learning_rate", "weight_decay", "huber_delta")
+        numeric_values: dict[str, float] = {}
+        for field_name in numeric_fields:
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{field_name} must be a finite numeric value.")
+            numeric_value = float(value)
+            if not math.isfinite(numeric_value):
+                raise ValueError(f"{field_name} must be finite.")
+            numeric_values[field_name] = numeric_value
+
+        if numeric_values["learning_rate"] <= 0.0:
+            raise ValueError("learning_rate must be greater than zero.")
+        if numeric_values["weight_decay"] < 0.0:
+            raise ValueError("weight_decay must be greater than or equal to zero.")
+        if numeric_values["huber_delta"] <= 0.0:
+            raise ValueError("huber_delta must be greater than zero.")
+
+        if not isinstance(self.loss, str):
+            raise ValueError("loss must be a string.")
+        loss = self.loss.strip().lower()
+        allowed_losses = {"huber", "mae", "mse"}
+        if loss not in allowed_losses:
+            raise ValueError(
+                f"loss must be one of {sorted(allowed_losses)}; got {self.loss!r}."
+            )
+
+        gradient_clip_norm = self.gradient_clip_norm
+        if gradient_clip_norm is not None:
+            if (
+                isinstance(gradient_clip_norm, bool)
+                or not isinstance(gradient_clip_norm, (int, float))
+            ):
+                raise ValueError(
+                    "gradient_clip_norm must be None or a finite positive number."
+                )
+            gradient_clip_norm = float(gradient_clip_norm)
+            if not math.isfinite(gradient_clip_norm) or gradient_clip_norm <= 0.0:
+                raise ValueError(
+                    "gradient_clip_norm must be None or a finite positive number."
+                )
+
+        object.__setattr__(self, "loss", loss)
+        object.__setattr__(self, "gradient_clip_norm", gradient_clip_norm)
+        for field_name, value in numeric_values.items():
+            object.__setattr__(self, field_name, value)
