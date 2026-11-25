@@ -7,6 +7,36 @@ from rdkit import Chem
 
 from .config import GraphConfig
 
+# Fixed RDKit bond-type vocabulary. "OTHER" is intentionally not used as a
+# catch-all category; unsupported bond types fail explicitly instead.
+_BOND_TYPE_NAMES = (
+    "UNSPECIFIED",
+    "SINGLE",
+    "DOUBLE",
+    "TRIPLE",
+    "QUADRUPLE",
+    "QUINTUPLE",
+    "HEXTUPLE",
+    "ONEANDAHALF",
+    "TWOANDAHALF",
+    "THREEANDAHALF",
+    "FOURANDAHALF",
+    "FIVEANDAHALF",
+    "AROMATIC",
+    "IONIC",
+    "HYDROGEN",
+    "THREECENTER",
+    "DATIVEONE",
+    "DATIVE",
+    "DATIVEL",
+    "DATIVER",
+    "ZERO",
+)
+_BOND_TYPE_VALUES = tuple(getattr(Chem.BondType, name) for name in _BOND_TYPE_NAMES)
+_BOND_TYPE_INDEX = {bond_type: index for index, bond_type in enumerate(_BOND_TYPE_VALUES)}
+_BOND_FLAG_OFFSET = 1 + len(_BOND_TYPE_NAMES)
+_BOND_FEATURE_WIDTH = _BOND_FLAG_OFFSET + 3
+
 
 def build_covalent_edge_index(mol: Chem.Mol) -> np.ndarray:
     """Return one endpoint pair for each RDKit bond, in RDKit bond order.
@@ -135,20 +165,66 @@ def _make_bidirectional_unique_edge_index(edge_index: np.ndarray) -> np.ndarray:
     return bidirectional
 
 
+
+def _build_chemical_edge_features(
+    mol: Chem.Mol,
+    edge_index: np.ndarray,
+    include_bond_features: bool,
+) -> np.ndarray:
+    """Encode bond identity and chemistry for each directed edge.
+
+    When enabled, columns are: is_bonded; one-hot RDKit bond type in
+    _BOND_TYPE_NAMES order; aromaticity; conjugation; ring membership.
+    Spatial-only edges receive an all-zero row. Reverse directions share
+    the same undirected bond attributes.
+    """
+    edge_count = edge_index.shape[1]
+    if not include_bond_features:
+        return np.empty((edge_count, 0), dtype=np.float32)
+
+    edge_attr = np.zeros((edge_count, _BOND_FEATURE_WIDTH), dtype=np.float32)
+    for edge_position, (source, target) in enumerate(edge_index.T):
+        bond = mol.GetBondBetweenAtoms(int(source), int(target))
+        if bond is None:
+            continue
+
+        edge_attr[edge_position, 0] = 1.0
+        bond_type = bond.GetBondType()
+        try:
+            bond_type_index = _BOND_TYPE_INDEX[bond_type]
+        except KeyError as exc:
+            raise ValueError(
+                f"Unsupported RDKit bond type for G7 edge features: {bond_type!s}."
+            ) from exc
+
+        edge_attr[edge_position, 1 + bond_type_index] = 1.0
+        edge_attr[edge_position, _BOND_FLAG_OFFSET] = float(bond.GetIsAromatic())
+        edge_attr[edge_position, _BOND_FLAG_OFFSET + 1] = float(
+            bond.GetIsConjugated()
+        )
+        edge_attr[edge_position, _BOND_FLAG_OFFSET + 2] = float(bond.IsInRing())
+
+    if not np.isfinite(edge_attr).all():
+        raise ValueError("Chemical edge features contain NaN or Inf.")
+    return edge_attr
+
+
 def build_edge_features(
     mol: Chem.Mol,
     conf_id: int | None,
     config: GraphConfig,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build the edge topology supported by the current G7 edge tasks.
+    """Build edge topology and the chemical bond attributes currently in G7.
 
     Covalent mode reads RDKit bonds; radius mode reads spatial neighbors
     from the selected conformer. Hybrid mode concatenates both topologies,
     retaining every RDKit bond regardless of the spatial cutoff.
 
     The returned edge_index is bidirectional, contains no duplicate directed
-    edges, and excludes self-loops. Chemical and geometric edge attributes
-    are implemented by subsequent tasks.
+    edges, and excludes self-loops. When include_bond_features is enabled,
+    edge_attr contains is_bonded, a bond-type one-hot vector, aromaticity,
+    conjugation, and ring membership. Spatial-only edges have zero chemical
+    attributes. Distance and RBF features belong to subsequent tasks.
     """
     if not isinstance(config, GraphConfig):
         raise TypeError("config must be a GraphConfig instance.")
@@ -168,5 +244,9 @@ def build_edge_features(
         edge_index = np.concatenate((covalent_edges, radius_edges), axis=1)
 
     edge_index = _make_bidirectional_unique_edge_index(edge_index)
-    edge_attr = np.empty((edge_index.shape[1], 0), dtype=np.float32)
+    edge_attr = _build_chemical_edge_features(
+        mol,
+        edge_index,
+        include_bond_features=config.include_bond_features,
+    )
     return edge_index, edge_attr

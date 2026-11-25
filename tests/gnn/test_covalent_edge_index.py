@@ -1,4 +1,4 @@
-"""Unit tests for RDKit covalent, radius, and hybrid edge topology (T3.1-T3.4)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.5)."""
 
 import unittest
 from unittest.mock import patch
@@ -95,7 +95,7 @@ class CovalentEdgeIndexTests(unittest.TestCase):
             edge_index,
             np.asarray([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=np.int64),
         )
-        self.assertEqual(edge_attr.shape, (4, 0))
+        self.assertEqual(edge_attr.shape, (4, 25))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_public_builder_requires_graph_config(self):
@@ -221,7 +221,7 @@ class RadiusEdgeIndexTests(unittest.TestCase):
         )
 
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 0))
+        self.assertEqual(edge_attr.shape, (2, 25))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_radius_mode_requires_a_conformer_id(self):
@@ -258,7 +258,7 @@ class HybridEdgeIndexTests(unittest.TestCase):
                 dtype=np.int64,
             ),
         )
-        self.assertEqual(edge_attr.shape, (6, 0))
+        self.assertEqual(edge_attr.shape, (6, 25))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_hybrid_requires_the_selected_conformer(self):
@@ -285,7 +285,7 @@ class HybridEdgeIndexTests(unittest.TestCase):
         # The pair is present in both sources but occurs only once per
         # direction in the final edge index.
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 0))
+        self.assertEqual(edge_attr.shape, (2, 25))
 
 
     def test_public_builder_removes_self_loops_and_reversed_duplicates(self):
@@ -303,7 +303,7 @@ class HybridEdgeIndexTests(unittest.TestCase):
             )
 
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 0))
+        self.assertEqual(edge_attr.shape, (2, 25))
 
     def test_radius_public_builder_preserves_empty_bidirectional_shape(self):
         molecule, conf_id = molecule_with_conformer(
@@ -319,7 +319,123 @@ class HybridEdgeIndexTests(unittest.TestCase):
 
         self.assertEqual(edge_index.shape, (2, 0))
         self.assertEqual(edge_index.dtype, np.dtype(np.int64))
-        self.assertEqual(edge_attr.shape, (0, 0))
+        self.assertEqual(edge_attr.shape, (0, 25))
+
+
+class ChemicalEdgeFeatureTests(unittest.TestCase):
+    def _features_by_edge(self, molecule, config):
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=None,
+            config=config,
+        )
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+        self.assertEqual(edge_attr.shape, (edge_index.shape[1], 25))
+        self.assertTrue(np.isfinite(edge_attr).all())
+        return {
+            (int(source), int(target)): features
+            for (source, target), features in zip(edge_index.T, edge_attr)
+        }
+
+    def test_single_double_triple_and_aromatic_bonds_are_one_hot(self):
+        cases = (
+            ("CC", 2),
+            ("C=C", 3),
+            ("C#C", 4),
+            ("c1ccccc1", 13),
+        )
+        for smiles, bond_type_column in cases:
+            with self.subTest(smiles=smiles):
+                molecule = Chem.MolFromSmiles(smiles)
+                features = self._features_by_edge(
+                    molecule,
+                    GraphConfig(edge_mode="covalent"),
+                )
+                forward = features[(0, 1)]
+                reverse = features[(1, 0)]
+
+                self.assertEqual(forward[0], 1.0)  # is_bonded
+                self.assertEqual(float(forward[1:22].sum()), 1.0)
+                self.assertEqual(forward[bond_type_column], 1.0)
+                np.testing.assert_array_equal(forward, reverse)
+
+    def test_aromaticity_conjugation_and_ring_membership_are_encoded(self):
+        aromatic = self._features_by_edge(
+            Chem.MolFromSmiles("c1ccccc1"),
+            GraphConfig(edge_mode="covalent"),
+        )[(0, 1)]
+        self.assertEqual(aromatic[22], 1.0)
+        self.assertEqual(aromatic[23], 1.0)
+        self.assertEqual(aromatic[24], 1.0)
+
+        conjugated = self._features_by_edge(
+            Chem.MolFromSmiles("C=CC=C"),
+            GraphConfig(edge_mode="covalent"),
+        )[(0, 1)]
+        self.assertEqual(conjugated[23], 1.0)
+        self.assertEqual(conjugated[22], 0.0)
+        self.assertEqual(conjugated[24], 0.0)
+
+        ring = self._features_by_edge(
+            Chem.MolFromSmiles("C1CCCCC1"),
+            GraphConfig(edge_mode="covalent"),
+        )[(0, 1)]
+        self.assertEqual(ring[24], 1.0)
+        self.assertEqual(ring[22], 0.0)
+
+    def test_spatial_only_edges_have_zero_chemical_attributes(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CCO",
+            [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(edge_mode="hybrid", cutoff=2.0),
+        )
+        edge_features = {
+            (int(source), int(target)): features
+            for (source, target), features in zip(edge_index.T, edge_attr)
+        }
+
+        self.assertEqual(edge_features[(0, 1)][0], 1.0)
+        self.assertEqual(edge_features[(1, 2)][0], 1.0)
+        np.testing.assert_array_equal(edge_features[(0, 2)], np.zeros(25, dtype=np.float32))
+        np.testing.assert_array_equal(edge_features[(2, 0)], np.zeros(25, dtype=np.float32))
+
+    def test_both_directions_receive_identical_bond_features(self):
+        features = self._features_by_edge(
+            Chem.MolFromSmiles("CC"),
+            GraphConfig(edge_mode="covalent"),
+        )
+        np.testing.assert_array_equal(features[(0, 1)], features[(1, 0)])
+
+    def test_bond_features_can_be_disabled_without_changing_topology(self):
+        molecule = Chem.MolFromSmiles("CC")
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=None,
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_bond_features=False,
+            ),
+        )
+
+        self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
+        self.assertEqual(edge_attr.shape, (2, 0))
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+
+    def test_empty_topology_returns_empty_chemical_feature_matrix(self):
+        molecule = Chem.MolFromSmiles("[He]")
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=None,
+            config=GraphConfig(edge_mode="covalent"),
+        )
+
+        self.assertEqual(edge_index.shape, (2, 0))
+        self.assertEqual(edge_attr.shape, (0, 25))
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
 
 

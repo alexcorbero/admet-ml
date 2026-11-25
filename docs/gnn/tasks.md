@@ -32,7 +32,7 @@
 - [x] **T3.1** Implementar enlaces RDKit.
 - [x] **T3.2** Implementar vecinos por cutoff.
 - [x] **T3.3** Implementar modo `hybrid`.
-- [ ] **T3.4** Implementar aristas bidireccionales sin duplicados/self-loops.
+- [x] **T3.4** Implementar aristas bidireccionales sin duplicados/self-loops.
 - [ ] **T3.5** Implementar atributos químicos de enlace.
 - [ ] **T3.6** Implementar distancia y Gaussian RBF.
 - [ ] **T3.7** Verificar que los kernels exponential/Lorentz no forman parte de `edge_attr`; pertenecen a densidad/DG (Fase 4).
