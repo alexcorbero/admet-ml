@@ -12,11 +12,11 @@
 ## Fase 1. Configuración (`src/gnn/config.py`)
 
 - [x] **T1.1** Implementar `GraphConfig`.
-- [ ] **T1.2** Implementar `AtomicFeaturesConfig`.
-- [ ] **T1.3** Implementar `ModelConfig`.
-- [ ] **T1.4** Implementar `TrainingConfig`.
+- [x] **T1.2** Implementar `AtomicFeaturesConfig`.
+- [x] **T1.3** Implementar `ModelConfig`.
+- [x] **T1.4** Implementar `TrainingConfig`.
 - [x] **T1.5** Implementar `GNNConfig` y serialización.
-- [ ] **T1.6** Añadir validaciones y tests.
+- [x] **T1.6** Añadir validaciones y tests.
 
 ## Fase 2. Features de nodo (`src/gnn/atom_features.py`)
 
