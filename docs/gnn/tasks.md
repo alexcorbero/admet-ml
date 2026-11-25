@@ -23,8 +23,8 @@
 - [x] **T2.1** Definir esquema y nombres de features.
 - [x] **T2.2** Implementar hibridación one-hot.
 - [x] **T2.3** Implementar quiralidad/CIP.
-- [ ] **T2.4** Implementar carga, grado, H, masa, aromaticidad y anillo.
-- [ ] **T2.5** Implementar `build_atom_features()`.
+- [x] **T2.4** Implementar carga, grado, H, masa, aromaticidad y anillo.
+- [x] **T2.5** Implementar `build_atom_features()`.
 - [ ] **T2.6** Probar H explícitos, aromaticidad, quiralidad y elementos raros.
 
 ## Fase 3. Aristas (`src/gnn/edge_features.py`)
