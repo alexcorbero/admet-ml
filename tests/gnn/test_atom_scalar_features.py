@@ -23,7 +23,7 @@ class AtomScalarFeatureTests(unittest.TestCase):
         self.assertAlmostEqual(features[3], 14.007, places=3)
         self.assertEqual(features[4:], (0, 0))
 
-    def test_heavy_atom_degree_excludes_hydrogen_and_counts_heavy_neighbors(self):
+    def test_heavy_atom_degree_counts_heavy_neighbors(self):
         atom = self.atom_from_smiles("CCO", atom_index=1)
         features = get_atom_scalar_features(
             atom,

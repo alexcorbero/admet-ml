@@ -96,12 +96,15 @@ def get_atom_scalar_features(
     elif not isinstance(config, AtomicFeaturesConfig):
         raise TypeError("config must be an AtomicFeaturesConfig instance or None.")
 
-    if (
-        config.include_attached_hydrogens or config.include_ring_membership
-    ) and not atom.HasOwningMol():
+    context_dependent_features = []
+    if config.include_attached_hydrogens:
+        context_dependent_features.append("attached_hydrogens")
+    if config.include_ring_membership:
+        context_dependent_features.append("ring_membership")
+    if context_dependent_features and not atom.HasOwningMol():
+        feature_names = ", ".join(context_dependent_features)
         raise ValueError(
-            "attached_hydrogens and ring_membership require an atom "
-            "associated with an RDKit molecule."
+            f"{feature_names} require an atom associated with an RDKit molecule."
         )
 
     features: list[int | float] = []
