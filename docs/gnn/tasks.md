@@ -29,7 +29,7 @@
 
 ## Fase 3. Aristas (`src/gnn/edge_features.py`)
 
-- [ ] **T3.1** Implementar enlaces RDKit.
+- [x] **T3.1** Implementar enlaces RDKit.
 - [ ] **T3.2** Implementar vecinos por cutoff.
 - [ ] **T3.3** Implementar modo `hybrid`.
 - [ ] **T3.4** Implementar aristas bidireccionales sin duplicados/self-loops.
