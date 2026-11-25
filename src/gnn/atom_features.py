@@ -8,6 +8,7 @@ belong to subsequent tasks.
 
 from __future__ import annotations
 
+from rdkit import Chem
 from rdkit.Chem.rdchem import Atom as RDKitAtom
 
 from .config import AtomicFeaturesConfig
@@ -124,5 +125,98 @@ def get_hybridization_one_hot(
     return tuple(
         1 if category == hybridization_name else 0
         for category in config.hybridization_types
+    )
+
+def get_chirality_one_hot(
+    atom: RDKitAtom,
+    config: AtomicFeaturesConfig | None = None,
+) -> tuple[int, ...]:
+    """Encode the RDKit chiral tag using the configured one-hot vocabulary.
+
+    The vector follows config.chirality_types exactly. Atoms without an
+    assigned chiral tag are represented by CHI_UNSPECIFIED. If chirality
+    features are disabled, an empty tuple is returned.
+    """
+    if not isinstance(atom, RDKitAtom):
+        raise TypeError("atom must be an RDKit Atom instance.")
+
+    if config is None:
+        config = AtomicFeaturesConfig()
+    elif not isinstance(config, AtomicFeaturesConfig):
+        raise TypeError("config must be an AtomicFeaturesConfig instance or None.")
+
+    if not config.include_chirality:
+        return ()
+
+    chiral_tag = atom.GetChiralTag()
+    category = getattr(chiral_tag, "name", None)
+    if not isinstance(category, str) or not category:
+        category = str(chiral_tag).rsplit(".", 1)[-1]
+    category = category.upper()
+
+    if category not in config.chirality_types:
+        raise ValueError(
+            f"RDKit chiral tag {category!r} is not present in "
+            "config.chirality_types."
+        )
+
+    return tuple(
+        1 if value == category else 0
+        for value in config.chirality_types
+    )
+
+
+def _get_cip_category(atom: RDKitAtom) -> str:
+    """Return the assigned R/S code without mutating the source molecule."""
+    try:
+        molecule = Chem.Mol(atom.GetOwningMol())
+    except RuntimeError:
+        # Standalone RDKit atoms have no molecular stereochemical context.
+        return "UNSPECIFIED"
+
+    atom_index = atom.GetIdx()
+    if atom_index < 0 or atom_index >= molecule.GetNumAtoms():
+        return "UNSPECIFIED"
+
+    # Assign on a copy: callers can safely reuse their original RDKit Mol.
+    Chem.AssignStereochemistry(molecule, cleanIt=True, force=True)
+    stereochemical_atom = molecule.GetAtomWithIdx(atom_index)
+    if not stereochemical_atom.HasProp("_CIPCode"):
+        return "UNSPECIFIED"
+
+    return stereochemical_atom.GetProp("_CIPCode").upper()
+
+
+def get_cip_one_hot(
+    atom: RDKitAtom,
+    config: AtomicFeaturesConfig | None = None,
+) -> tuple[int, ...]:
+    """Encode an atom's assigned CIP label using the configured vocabulary.
+
+    RDKit assigns CIP labels at molecule level. The helper therefore makes
+    a temporary molecule copy, assigns stereochemistry there, and reads the
+    corresponding atom's _CIPCode property. Missing labels map to
+    UNSPECIFIED. The output follows config.cip_types exactly.
+    """
+    if not isinstance(atom, RDKitAtom):
+        raise TypeError("atom must be an RDKit Atom instance.")
+
+    if config is None:
+        config = AtomicFeaturesConfig()
+    elif not isinstance(config, AtomicFeaturesConfig):
+        raise TypeError("config must be an AtomicFeaturesConfig instance or None.")
+
+    if not config.include_cip:
+        return ()
+
+    category = _get_cip_category(atom)
+    if category not in config.cip_types:
+        raise ValueError(
+            f"CIP category {category!r} is not present in config.cip_types."
+        )
+
+    return tuple(
+        1 if value == category else 0
+        for value in config.cip_types
     )
 
