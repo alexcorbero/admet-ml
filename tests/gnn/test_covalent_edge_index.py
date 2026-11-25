@@ -5,7 +5,8 @@ import unittest
 import numpy as np
 from rdkit import Chem
 
-from src.gnn.edge_features import build_covalent_edge_index
+from src.gnn.edge_features import build_covalent_edge_index, build_edge_features
+from src.gnn.config import GraphConfig
 
 
 class CovalentEdgeIndexTests(unittest.TestCase):
@@ -66,6 +67,34 @@ class CovalentEdgeIndexTests(unittest.TestCase):
 
         self.assertEqual(edge_index.shape, (2, 1))
         self.assertEqual(edge_index.tolist(), [[0], [1]])
+
+
+    def test_public_builder_exposes_covalent_topology_and_empty_attributes(self):
+        molecule = Chem.MolFromSmiles("CCO")
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=None,
+            config=GraphConfig(edge_mode="covalent"),
+        )
+
+        self.assertEqual(edge_index.shape, (2, molecule.GetNumBonds()))
+        self.assertEqual(edge_attr.shape, (molecule.GetNumBonds(), 0))
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+
+    def test_unimplemented_edge_modes_fail_explicitly(self):
+        molecule = Chem.MolFromSmiles("CC")
+        for edge_mode in ("radius", "hybrid"):
+            with self.subTest(edge_mode=edge_mode), self.assertRaises(NotImplementedError):
+                build_edge_features(
+                    molecule,
+                    conf_id=None,
+                    config=GraphConfig(edge_mode=edge_mode),
+                )
+
+    def test_public_builder_requires_graph_config(self):
+        molecule = Chem.MolFromSmiles("CC")
+        with self.assertRaises(TypeError):
+            build_edge_features(molecule, conf_id=None, config={})
 
     def test_non_rdkit_molecules_are_rejected(self):
         for value in (None, "CC", object()):
