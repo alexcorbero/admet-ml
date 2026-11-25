@@ -33,7 +33,7 @@
 - [x] **T3.2** Implementar vecinos por cutoff.
 - [x] **T3.3** Implementar modo `hybrid`.
 - [x] **T3.4** Implementar aristas bidireccionales sin duplicados/self-loops.
-- [ ] **T3.5** Implementar atributos químicos de enlace.
+- [x] **T3.5** Implementar atributos químicos de enlace.
 - [ ] **T3.6** Implementar distancia y Gaussian RBF.
 - [ ] **T3.7** Verificar que los kernels exponential/Lorentz no forman parte de `edge_attr`; pertenecen a densidad/DG (Fase 4).
 - [ ] **T3.8** Implementar naming de `edge_attr`.

@@ -60,6 +60,36 @@ def build_covalent_edge_index(mol: Chem.Mol) -> np.ndarray:
     return edge_index
 
 
+def _get_conformer_positions(mol: Chem.Mol, conf_id: int) -> np.ndarray:
+    """Return validated coordinates for the requested RDKit conf_id."""
+    if not isinstance(mol, Chem.Mol):
+        raise TypeError("mol must be an RDKit Mol instance.")
+    if isinstance(conf_id, (bool, np.bool_)) or not isinstance(
+        conf_id, (int, np.integer)
+    ):
+        raise ValueError("conf_id must be an integer RDKit conformer ID.")
+    if int(conf_id) < 0:
+        raise ValueError("conf_id must be a non-negative RDKit conformer ID.")
+
+    try:
+        conformer = mol.GetConformer(int(conf_id))
+    except (ValueError, RuntimeError) as exc:
+        raise ValueError(
+            f"Molecule does not contain conformer with conf_id={conf_id}."
+        ) from exc
+
+    positions = np.asarray(conformer.GetPositions(), dtype=np.float64)
+    expected_shape = (mol.GetNumAtoms(), 3)
+    if positions.shape != expected_shape:
+        raise ValueError(
+            "Conformer coordinates must have shape "
+            f"{expected_shape}; got {positions.shape}."
+        )
+    if not np.isfinite(positions).all():
+        raise ValueError("Conformer coordinates contain NaN or Inf.")
+    return positions
+
+
 def build_radius_edge_index(
     mol: Chem.Mol,
     conf_id: int,
@@ -87,14 +117,6 @@ def build_radius_edge_index(
         Integer edge index with shape [2, E] and dtype int64. If no pair
         satisfies the cutoff, the result has shape [2, 0].
     """
-    if not isinstance(mol, Chem.Mol):
-        raise TypeError("mol must be an RDKit Mol instance.")
-    if isinstance(conf_id, (bool, np.bool_)) or not isinstance(
-        conf_id, (int, np.integer)
-    ):
-        raise ValueError("conf_id must be an integer RDKit conformer ID.")
-    if int(conf_id) < 0:
-        raise ValueError("conf_id must be a non-negative RDKit conformer ID.")
     if isinstance(cutoff, (bool, np.bool_)):
         raise ValueError("cutoff must be a finite positive number.")
     try:
@@ -104,22 +126,7 @@ def build_radius_edge_index(
     if not np.isfinite(cutoff_value) or cutoff_value <= 0.0:
         raise ValueError("cutoff must be a finite positive number.")
 
-    try:
-        conformer = mol.GetConformer(int(conf_id))
-    except (ValueError, RuntimeError) as exc:
-        raise ValueError(
-            f"Molecule does not contain conformer with conf_id={conf_id}."
-        ) from exc
-
-    positions = np.asarray(conformer.GetPositions(), dtype=np.float64)
-    expected_shape = (mol.GetNumAtoms(), 3)
-    if positions.shape != expected_shape:
-        raise ValueError(
-            "Conformer coordinates must have shape "
-            f"{expected_shape}; got {positions.shape}."
-        )
-    if not np.isfinite(positions).all():
-        raise ValueError("Conformer coordinates contain NaN or Inf.")
+    positions = _get_conformer_positions(mol, conf_id)
 
     atom_count = mol.GetNumAtoms()
     if atom_count < 2:
@@ -209,6 +216,70 @@ def _build_chemical_edge_features(
     return edge_attr
 
 
+
+def _build_geometric_edge_features(
+    mol: Chem.Mol,
+    edge_index: np.ndarray,
+    conf_id: int | None,
+    config: GraphConfig,
+) -> np.ndarray:
+    """Build per-edge distances and Gaussian RBFs from one RDKit conformer.
+
+    RBF centers are evenly spaced from 0 to config.cutoff (Angstrom). The
+    Gaussian width is set by the center spacing: gamma = 1 / spacing**2.
+    """
+    include_distance = config.include_distance
+    include_rbf = config.include_rbf
+    edge_count = edge_index.shape[1]
+    feature_width = int(include_distance) + (
+        config.rbf_num_centers if include_rbf else 0
+    )
+    if feature_width == 0:
+        return np.empty((edge_count, 0), dtype=np.float32)
+    if conf_id is None:
+        raise ValueError(
+            "conf_id is required when distance or Gaussian RBF edge features are enabled."
+        )
+
+    positions = _get_conformer_positions(mol, conf_id)
+    source, target = edge_index
+    displacement = positions[source] - positions[target]
+    with np.errstate(over="ignore", invalid="ignore"):
+        distances = np.linalg.norm(displacement, axis=1)
+    if not np.isfinite(distances).all():
+        raise ValueError("Edge distances contain NaN or Inf.")
+
+    columns: list[np.ndarray] = []
+    if include_distance:
+        columns.append(distances.astype(np.float32, copy=False).reshape(edge_count, 1))
+
+    if include_rbf:
+        centers = np.linspace(
+            0.0,
+            config.cutoff,
+            config.rbf_num_centers,
+            dtype=np.float64,
+        )
+        spacing = float(centers[1] - centers[0])
+        if not np.isfinite(spacing) or spacing <= 0.0:
+            raise ValueError("Gaussian RBF center spacing must be finite and positive.")
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            gamma = 1.0 / (spacing * spacing)
+        if not np.isfinite(gamma) or gamma <= 0.0:
+            raise ValueError("Gaussian RBF gamma must be finite and positive.")
+
+        differences = distances[:, None] - centers[None, :]
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            rbf = np.exp(-gamma * differences**2)
+        if not np.isfinite(rbf).all():
+            raise ValueError("Gaussian RBF edge features contain NaN or Inf.")
+        columns.append(rbf.astype(np.float32, copy=False))
+
+    if not columns:
+        return np.empty((edge_count, 0), dtype=np.float32)
+    return np.concatenate(columns, axis=1).astype(np.float32, copy=False)
+
+
 def build_edge_features(
     mol: Chem.Mol,
     conf_id: int | None,
@@ -224,7 +295,9 @@ def build_edge_features(
     edges, and excludes self-loops. When include_bond_features is enabled,
     edge_attr contains is_bonded, a bond-type one-hot vector, aromaticity,
     conjugation, and ring membership. Spatial-only edges have zero chemical
-    attributes. Distance and RBF features belong to subsequent tasks.
+    attributes. If configured, edge_attr also includes the Euclidean
+    distance in Angstrom and Gaussian RBFs evaluated at evenly spaced centers
+    from zero to config.cutoff. RBF gamma is the inverse squared center spacing.
     """
     if not isinstance(config, GraphConfig):
         raise TypeError("config must be a GraphConfig instance.")
@@ -244,9 +317,19 @@ def build_edge_features(
         edge_index = np.concatenate((covalent_edges, radius_edges), axis=1)
 
     edge_index = _make_bidirectional_unique_edge_index(edge_index)
-    edge_attr = _build_chemical_edge_features(
+    chemical_features = _build_chemical_edge_features(
         mol,
         edge_index,
         include_bond_features=config.include_bond_features,
     )
+    geometric_features = _build_geometric_edge_features(
+        mol,
+        edge_index,
+        conf_id=conf_id,
+        config=config,
+    )
+    edge_attr = np.concatenate(
+        (chemical_features, geometric_features),
+        axis=1,
+    ).astype(np.float32, copy=False)
     return edge_index, edge_attr

@@ -1,4 +1,4 @@
-"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.5)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.6)."""
 
 import unittest
 from unittest.mock import patch
@@ -88,7 +88,11 @@ class CovalentEdgeIndexTests(unittest.TestCase):
         edge_index, edge_attr = build_edge_features(
             molecule,
             conf_id=None,
-            config=GraphConfig(edge_mode="covalent"),
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_distance=False,
+                include_rbf=False,
+            ),
         )
 
         np.testing.assert_array_equal(
@@ -221,7 +225,7 @@ class RadiusEdgeIndexTests(unittest.TestCase):
         )
 
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 25))
+        self.assertEqual(edge_attr.shape, (2, 58))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_radius_mode_requires_a_conformer_id(self):
@@ -258,7 +262,7 @@ class HybridEdgeIndexTests(unittest.TestCase):
                 dtype=np.int64,
             ),
         )
-        self.assertEqual(edge_attr.shape, (6, 25))
+        self.assertEqual(edge_attr.shape, (6, 58))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_hybrid_requires_the_selected_conformer(self):
@@ -285,7 +289,7 @@ class HybridEdgeIndexTests(unittest.TestCase):
         # The pair is present in both sources but occurs only once per
         # direction in the final edge index.
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 25))
+        self.assertEqual(edge_attr.shape, (2, 58))
 
 
     def test_public_builder_removes_self_loops_and_reversed_duplicates(self):
@@ -303,7 +307,7 @@ class HybridEdgeIndexTests(unittest.TestCase):
             )
 
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 25))
+        self.assertEqual(edge_attr.shape, (2, 58))
 
     def test_radius_public_builder_preserves_empty_bidirectional_shape(self):
         molecule, conf_id = molecule_with_conformer(
@@ -319,15 +323,23 @@ class HybridEdgeIndexTests(unittest.TestCase):
 
         self.assertEqual(edge_index.shape, (2, 0))
         self.assertEqual(edge_index.dtype, np.dtype(np.int64))
-        self.assertEqual(edge_attr.shape, (0, 25))
+        self.assertEqual(edge_attr.shape, (0, 58))
 
 
 class ChemicalEdgeFeatureTests(unittest.TestCase):
     def _features_by_edge(self, molecule, config):
+        chemical_only_config = GraphConfig(
+            edge_mode=config.edge_mode,
+            cutoff=config.cutoff,
+            include_bond_features=config.include_bond_features,
+            include_distance=False,
+            include_rbf=False,
+            rbf_num_centers=config.rbf_num_centers,
+        )
         edge_index, edge_attr = build_edge_features(
             molecule,
             conf_id=None,
-            config=config,
+            config=chemical_only_config,
         )
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
         self.assertEqual(edge_attr.shape, (edge_index.shape[1], 25))
@@ -430,11 +442,181 @@ class ChemicalEdgeFeatureTests(unittest.TestCase):
         edge_index, edge_attr = build_edge_features(
             molecule,
             conf_id=None,
-            config=GraphConfig(edge_mode="covalent"),
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_distance=False,
+                include_rbf=False,
+            ),
         )
 
         self.assertEqual(edge_index.shape, (2, 0))
-        self.assertEqual(edge_attr.shape, (0, 25))
+        self.assertEqual(edge_attr.shape, (0, 58))
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+
+
+class GeometricEdgeFeatureTests(unittest.TestCase):
+    def test_distance_is_euclidean_angstrom_and_symmetric(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 2.0, 2.0)],
+        )
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_rbf=False,
+            ),
+        )
+
+        self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
+        self.assertEqual(edge_attr.shape, (2, 26))
+        np.testing.assert_allclose(edge_attr[:, 25], [3.0, 3.0])
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+
+    def test_gaussian_rbf_matches_centers_and_gaussian_formula(self):
+        cutoff = 4.0
+        n_centers = 5
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(
+                edge_mode="covalent",
+                cutoff=cutoff,
+                include_distance=False,
+                rbf_num_centers=n_centers,
+            ),
+        )
+
+        # Centers are [0, 1, 2, 3, 4], spacing is 1, gamma is 1.
+        expected = np.exp(-((1.0 - np.arange(n_centers, dtype=np.float64)) ** 2))
+        self.assertEqual(edge_attr.shape, (2, 25 + n_centers))
+        np.testing.assert_allclose(edge_attr[0, 25:], expected, rtol=1e-6)
+        np.testing.assert_allclose(edge_attr[1, 25:], expected, rtol=1e-6)
+        self.assertEqual(float(edge_attr[0, 26]), 1.0)
+
+    def test_rbf_and_distance_can_be_enabled_independently(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+
+        _, distance_only = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_rbf=False,
+            ),
+        )
+        _, rbf_only = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_distance=False,
+                rbf_num_centers=7,
+            ),
+        )
+        self.assertEqual(distance_only.shape, (2, 26))
+        self.assertEqual(rbf_only.shape, (2, 32))
+
+    def test_covalent_mode_requires_conf_id_only_when_geometry_is_enabled(self):
+        molecule = Chem.MolFromSmiles("CC")
+        with self.assertRaisesRegex(ValueError, "conf_id is required"):
+            build_edge_features(
+                molecule,
+                conf_id=None,
+                config=GraphConfig(edge_mode="covalent"),
+            )
+
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=None,
+            config=GraphConfig(
+                edge_mode="covalent",
+                include_distance=False,
+                include_rbf=False,
+            ),
+        )
+        self.assertEqual(edge_index.shape, (2, 2))
+        self.assertEqual(edge_attr.shape, (2, 25))
+
+    def test_covalent_geometry_rejects_non_finite_coordinates(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (float("inf"), 0.0, 0.0)],
+        )
+        with self.assertRaisesRegex(ValueError, "NaN or Inf"):
+            build_edge_features(
+                molecule,
+                conf_id=conf_id,
+                config=GraphConfig(edge_mode="covalent"),
+            )
+
+    def test_selected_conf_id_controls_distance_and_rbf(self):
+        molecule, first_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            conf_id=11,
+        )
+        second = Chem.Conformer(molecule.GetNumAtoms())
+        second.SetAtomPosition(0, (0.0, 0.0, 0.0))
+        second.SetAtomPosition(1, (3.0, 0.0, 0.0))
+        second.SetId(23)
+        second_id = molecule.AddConformer(second, assignId=False)
+
+        _, first_attr = build_edge_features(
+            molecule,
+            conf_id=first_id,
+            config=GraphConfig(edge_mode="covalent", include_rbf=False),
+        )
+        _, second_attr = build_edge_features(
+            molecule,
+            conf_id=second_id,
+            config=GraphConfig(edge_mode="covalent", include_rbf=False),
+        )
+        np.testing.assert_allclose(first_attr[:, 25], [1.0, 1.0])
+        np.testing.assert_allclose(second_attr[:, 25], [3.0, 3.0])
+
+    def test_spatial_edges_receive_distance_and_rbf_features(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.5, 0.0, 0.0)],
+        )
+        # Use a non-bonded pair so radius mode tests spatial edge attributes.
+        molecule = Chem.MolFromSmiles("[He].[Ne]")
+        conformer = Chem.Conformer(molecule.GetNumAtoms())
+        conformer.SetAtomPosition(0, (0.0, 0.0, 0.0))
+        conformer.SetAtomPosition(1, (1.5, 0.0, 0.0))
+        conf_id = molecule.AddConformer(conformer, assignId=False)
+
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(edge_mode="radius", cutoff=2.0, rbf_num_centers=4),
+        )
+        self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
+        self.assertEqual(edge_attr.shape, (2, 25 + 1 + 4))
+        np.testing.assert_allclose(edge_attr[:, 25], [1.5, 1.5])
+        self.assertTrue(np.isfinite(edge_attr).all())
+
+    def test_empty_edge_topology_keeps_configured_geometric_width(self):
+        molecule, conf_id = molecule_with_conformer(
+            "[He]",
+            [(0.0, 0.0, 0.0)],
+        )
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(edge_mode="covalent"),
+        )
+        self.assertEqual(edge_index.shape, (2, 0))
+        self.assertEqual(edge_attr.shape, (0, 58))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
 
