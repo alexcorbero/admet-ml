@@ -157,6 +157,8 @@ class GraphConfig:
                 f"edge_mode must be one of {sorted(_EDGE_MODES)}; "
                 f"got {self.edge_mode!r}."
             )
+        if isinstance(self.cutoff, bool):
+            raise ValueError("cutoff must be a finite numeric value greater than zero.")
         try:
             cutoff = float(self.cutoff)
         except (TypeError, ValueError) as exc:
@@ -269,6 +271,11 @@ class AtomicFeaturesConfig:
         density_types = _as_string_tuple(self.density_types, "density_types")
         density_elements = _as_string_tuple(self.density_elements, "density_elements")
 
+        allowed_chirality_types = set(_DEFAULT_CHIRALITY_TYPES)
+        if any(value not in allowed_chirality_types for value in chirality_types):
+            raise ValueError(
+                "chirality_types may contain only the supported RDKit chiral tags."
+            )
         allowed_cip_types = set(_DEFAULT_CIP_TYPES)
         if any(value not in allowed_cip_types for value in cip_types):
             raise ValueError("cip_types may contain only 'R', 'S', and 'UNSPECIFIED'.")
@@ -299,6 +306,8 @@ class AtomicFeaturesConfig:
         # Validate defaults and explicit configurations through the same path.
         dg_kernel_configs = _as_dg_kernel_configs(dg_kernel_configs)
 
+        if isinstance(self.curvature_neutral_value, bool):
+            raise ValueError("curvature_neutral_value must be a finite numeric value.")
         try:
             curvature_neutral_value = float(self.curvature_neutral_value)
         except (TypeError, ValueError) as exc:
