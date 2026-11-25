@@ -164,7 +164,7 @@ def build_edge_features(
             raise ValueError("conf_id is required for edge_mode='hybrid'.")
         covalent_edges = build_covalent_edge_index(mol)
         radius_edges = build_radius_edge_index(mol, conf_id, config.cutoff)
-        # Keep both sources intact. Duplicate removal and reverse edges are T3.4.
+        # Preserve both raw sources; the shared finalization below normalizes direction and uniqueness.
         edge_index = np.concatenate((covalent_edges, radius_edges), axis=1)
 
     edge_index = _make_bidirectional_unique_edge_index(edge_index)
