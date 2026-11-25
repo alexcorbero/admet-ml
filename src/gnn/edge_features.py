@@ -117,8 +117,12 @@ def build_edge_features(
     """Build the edge topology supported by the current G7 edge tasks.
 
     Covalent mode reads RDKit bonds; radius mode reads spatial neighbors
-    from the selected conformer. Hybrid composition and non-empty chemical
-    or geometric edge attributes belong to subsequent tasks.
+    from the selected conformer. Hybrid mode concatenates both topologies,
+    retaining every RDKit bond regardless of the spatial cutoff.
+
+    Reverse-edge expansion and removal of duplicate/self-loop edges belong
+    to T3.4. Chemical and geometric edge attributes are implemented by
+    subsequent tasks.
     """
     if not isinstance(config, GraphConfig):
         raise TypeError("config must be a GraphConfig instance.")
@@ -129,11 +133,13 @@ def build_edge_features(
         if conf_id is None:
             raise ValueError("conf_id is required for edge_mode='radius'.")
         edge_index = build_radius_edge_index(mol, conf_id, config.cutoff)
-    else:
-        raise NotImplementedError(
-            "edge_mode='hybrid' is not implemented yet; "
-            "it belongs to T3.3."
-        )
+    else:  # hybrid
+        if conf_id is None:
+            raise ValueError("conf_id is required for edge_mode='hybrid'.")
+        covalent_edges = build_covalent_edge_index(mol)
+        radius_edges = build_radius_edge_index(mol, conf_id, config.cutoff)
+        # Keep both sources intact. Duplicate removal and reverse edges are T3.4.
+        edge_index = np.concatenate((covalent_edges, radius_edges), axis=1)
 
     edge_attr = np.empty((edge_index.shape[1], 0), dtype=np.float32)
     return edge_index, edge_attr

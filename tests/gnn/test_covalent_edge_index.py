@@ -1,4 +1,4 @@
-"""Unit tests for RDKit covalent and radius edge topology (T3.1-T3.2)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge topology (T3.1-T3.3)."""
 
 import unittest
 
@@ -237,6 +237,57 @@ class RadiusEdgeIndexTests(unittest.TestCase):
                 conf_id=None,
                 config=GraphConfig(edge_mode="radius"),
             )
+
+
+
+class HybridEdgeIndexTests(unittest.TestCase):
+    def test_hybrid_keeps_all_covalent_bonds_and_adds_spatial_neighbors(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CCO",
+            [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(edge_mode="hybrid", cutoff=2.0),
+        )
+
+        # Bond 0-1 lies outside the cutoff but must be retained. Pair 0-2
+        # is spatially close despite not being covalently bonded.
+        np.testing.assert_array_equal(
+            edge_index,
+            np.asarray([[0, 1, 0], [1, 2, 2]], dtype=np.int64),
+        )
+        self.assertEqual(edge_attr.shape, (3, 0))
+        self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+
+    def test_hybrid_requires_the_selected_conformer(self):
+        molecule = Chem.MolFromSmiles("CC")
+        with self.assertRaisesRegex(ValueError, "conf_id is required"):
+            build_edge_features(
+                molecule,
+                conf_id=None,
+                config=GraphConfig(edge_mode="hybrid"),
+            )
+
+    def test_hybrid_concatenates_sources_before_t34_deduplication(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+
+        edge_index, _ = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(edge_mode="hybrid", cutoff=2.0),
+        )
+
+        # The same pair is present in both source topologies. T3.4 owns
+        # duplicate removal and bidirectional expansion.
+        self.assertEqual(edge_index.tolist(), [[0, 0], [1, 1]])
+
+
 
 
 if __name__ == "__main__":
