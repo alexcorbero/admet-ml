@@ -15,7 +15,7 @@
 - [ ] **T1.2** Implementar `AtomicFeaturesConfig`.
 - [ ] **T1.3** Implementar `ModelConfig`.
 - [ ] **T1.4** Implementar `TrainingConfig`.
-- [ ] **T1.5** Implementar `GNNConfig` y serialización.
+- [x] **T1.5** Implementar `GNNConfig` y serialización.
 - [ ] **T1.6** Añadir validaciones y tests.
 
 ## Fase 2. Features de nodo (`src/gnn/atom_features.py`)
