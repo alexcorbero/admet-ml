@@ -168,11 +168,11 @@ def get_chirality_one_hot(
 
 def _get_cip_category(atom: RDKitAtom) -> str:
     """Return the assigned R/S code without mutating the source molecule."""
-    try:
-        molecule = Chem.Mol(atom.GetOwningMol())
-    except RuntimeError:
+    if not atom.HasOwningMol():
         # Standalone RDKit atoms have no molecular stereochemical context.
         return "UNSPECIFIED"
+
+    molecule = Chem.Mol(atom.GetOwningMol())
 
     atom_index = atom.GetIdx()
     if atom_index < 0 or atom_index >= molecule.GetNumAtoms():
