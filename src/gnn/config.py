@@ -166,7 +166,7 @@ class GraphConfig:
         )
         for field_name in boolean_fields:
             if not isinstance(getattr(self, field_name), bool):
-                raise ValueError(&"{field_name} must be a boolean.")
+                raise ValueError(f"{field_name} must be a boolean.")
 
         if (
             isinstance(self.rbf_num_centers, bool)
@@ -193,7 +193,7 @@ class AtomicFeaturesConfig:
     include_formal_charge: bool = True
     include_heavy_atom_degree: bool = True
     include_attached_hydrogens: bool = True
-     include_atomic_mass: bool = True
+    include_atomic_mass: bool = True
     include_aromaticity: bool = True
     include_ring_membership: bool = True
     include_hybridization: bool = True
