@@ -303,11 +303,15 @@ class HybridEdgeIndexTests(unittest.TestCase):
             edge_index, edge_attr = build_edge_features(
                 molecule,
                 conf_id=None,
-                config=GraphConfig(edge_mode="covalent"),
+                config=GraphConfig(
+                    edge_mode="covalent",
+                    include_distance=False,
+                    include_rbf=False,
+                ),
             )
 
         self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
-        self.assertEqual(edge_attr.shape, (2, 58))
+        self.assertEqual(edge_attr.shape, (2, 25))
 
     def test_radius_public_builder_preserves_empty_bidirectional_shape(self):
         molecule, conf_id = molecule_with_conformer(
@@ -412,8 +416,16 @@ class ChemicalEdgeFeatureTests(unittest.TestCase):
 
         self.assertEqual(edge_features[(0, 1)][0], 1.0)
         self.assertEqual(edge_features[(1, 2)][0], 1.0)
-        np.testing.assert_array_equal(edge_features[(0, 2)], np.zeros(25, dtype=np.float32))
-        np.testing.assert_array_equal(edge_features[(2, 0)], np.zeros(25, dtype=np.float32))
+        np.testing.assert_array_equal(
+            edge_features[(0, 2)][:25],
+            np.zeros(25, dtype=np.float32),
+        )
+        np.testing.assert_array_equal(
+            edge_features[(2, 0)][:25],
+            np.zeros(25, dtype=np.float32),
+        )
+        self.assertGreater(edge_features[(0, 2)][25], 0.0)
+        self.assertGreater(edge_features[(2, 0)][25], 0.0)
 
     def test_both_directions_receive_identical_bond_features(self):
         features = self._features_by_edge(
@@ -430,6 +442,8 @@ class ChemicalEdgeFeatureTests(unittest.TestCase):
             config=GraphConfig(
                 edge_mode="covalent",
                 include_bond_features=False,
+                include_distance=False,
+                include_rbf=False,
             ),
         )
 
@@ -450,7 +464,7 @@ class ChemicalEdgeFeatureTests(unittest.TestCase):
         )
 
         self.assertEqual(edge_index.shape, (2, 0))
-        self.assertEqual(edge_attr.shape, (0, 58))
+        self.assertEqual(edge_attr.shape, (0, 25))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
 
