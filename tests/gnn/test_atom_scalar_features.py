@@ -112,6 +112,24 @@ class AtomScalarFeatureTests(unittest.TestCase):
         )
         self.assertEqual(get_atom_scalar_features(atom, config), ())
 
+    def test_molecule_context_is_required_for_hydrogen_and_ring_features(self):
+        with self.assertRaisesRegex(ValueError, "associated with an RDKit molecule"):
+            get_atom_scalar_features(Chem.Atom(6))
+
+    def test_detached_atom_supports_context_independent_features(self):
+        atom = Chem.Atom(6)
+        config = AtomicFeaturesConfig(
+            include_attached_hydrogens=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+        )
+        features = get_atom_scalar_features(atom, config)
+        self.assertEqual(features[:2], (0, 0))
+        self.assertAlmostEqual(features[2], 12.011, places=3)
+        self.assertEqual(features[3], 0)
+
     def test_invalid_atom_and_config_types_are_rejected(self):
         with self.assertRaises(TypeError):
             get_atom_scalar_features(object())
