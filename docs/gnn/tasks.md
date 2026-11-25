@@ -35,7 +35,7 @@
 - [ ] **T3.4** Implementar aristas bidireccionales sin duplicados/self-loops.
 - [ ] **T3.5** Implementar atributos químicos de enlace.
 - [ ] **T3.6** Implementar distancia y Gaussian RBF.
-- [ ] **T3.7** Implementar kernels exponential/Lorentz.
+- [ ] **T3.7** Verificar que los kernels exponential/Lorentz no forman parte de `edge_attr`; pertenecen a densidad/DG (Fase 4).
 - [ ] **T3.8** Implementar naming de `edge_attr`.
 - [ ] **T3.9** Añadir tests de los tres modos.
 
