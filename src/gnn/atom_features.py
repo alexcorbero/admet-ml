@@ -110,9 +110,12 @@ def get_atom_scalar_features(
         features.append(atom.GetFormalCharge())
 
     if config.include_heavy_atom_degree:
-        features.append(
+        heavy_atom_degree = (
             sum(neighbor.GetAtomicNum() > 1 for neighbor in atom.GetNeighbors())
+            if atom.HasOwningMol()
+            else 0
         )
+        features.append(heavy_atom_degree)
 
     if config.include_attached_hydrogens:
         features.append(atom.GetTotalNumHs(includeNeighbors=True))
