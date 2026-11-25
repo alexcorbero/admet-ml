@@ -1,9 +1,8 @@
 """Schema and focused encoders for local chemical atom features.
 
-This module defines the column contract for x_chem and implements the
-hybridization one-hot encoder. Atomic number is kept separately in z.
-Other atom-feature extraction and the complete build_atom_features API
-belong to subsequent tasks.
+This module defines the column contract for x_chem and implements scalar
+atom properties and categorical encoders. Atomic number is kept separately
+in z. The complete build_atom_features API belongs to a subsequent task.
 """
 
 from __future__ import annotations
@@ -75,6 +74,52 @@ def get_atom_feature_names(
         names.extend(f"cip_{value}" for value in config.cip_types)
 
     return tuple(names)
+
+
+def get_atom_scalar_features(
+    atom: RDKitAtom,
+    config: AtomicFeaturesConfig | None = None,
+) -> tuple[int | float, ...]:
+    """Return enabled scalar/binary atom features in schema order.
+
+    Values are emitted in the same fixed order used by
+    :func:`get_atom_feature_names`: formal charge, heavy-atom degree,
+    attached hydrogens, atomic mass, aromaticity, and ring membership.
+    Disabled fields are omitted. Hydrogen counts include both implicit
+    hydrogens and explicit hydrogen neighbors.
+    """
+    if not isinstance(atom, RDKitAtom):
+        raise TypeError("atom must be an RDKit Atom instance.")
+
+    if config is None:
+        config = AtomicFeaturesConfig()
+    elif not isinstance(config, AtomicFeaturesConfig):
+        raise TypeError("config must be an AtomicFeaturesConfig instance or None.")
+
+    features: list[int | float] = []
+
+    if config.include_formal_charge:
+        features.append(atom.GetFormalCharge())
+
+    if config.include_heavy_atom_degree:
+        features.append(
+            sum(neighbor.GetAtomicNum() > 1 for neighbor in atom.GetNeighbors())
+        )
+
+    if config.include_attached_hydrogens:
+        features.append(atom.GetTotalNumHs(includeNeighbors=True))
+
+    if config.include_atomic_mass:
+        features.append(float(atom.GetMass()))
+
+    if config.include_aromaticity:
+        features.append(int(atom.GetIsAromatic()))
+
+    if config.include_ring_membership:
+        features.append(int(atom.IsInRing()))
+
+    return tuple(features)
+
 
 def get_hybridization_one_hot(
     atom: RDKitAtom,
