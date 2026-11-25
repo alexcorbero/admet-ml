@@ -109,6 +109,32 @@ def build_radius_edge_index(
     )
 
 
+
+def _make_bidirectional_unique_edge_index(edge_index: np.ndarray) -> np.ndarray:
+    """Expand undirected pairs to sorted directed edges, dropping loops/duplicates."""
+    edge_index = np.asarray(edge_index)
+    if edge_index.ndim != 2 or edge_index.shape[0] != 2:
+        raise ValueError("edge_index must have shape [2, E].")
+    if not np.issubdtype(edge_index.dtype, np.integer):
+        raise ValueError("edge_index must contain integer atom indices.")
+
+    undirected_pairs = sorted(
+        {
+            (min(int(source), int(target)), max(int(source), int(target)))
+            for source, target in edge_index.T
+            if source != target
+        }
+    )
+    if not undirected_pairs:
+        return np.empty((2, 0), dtype=np.int64)
+
+    pairs = np.asarray(undirected_pairs, dtype=np.int64)
+    bidirectional = np.empty((2, 2 * len(pairs)), dtype=np.int64)
+    bidirectional[:, 0::2] = pairs.T
+    bidirectional[:, 1::2] = pairs[:, ::-1].T
+    return bidirectional
+
+
 def build_edge_features(
     mol: Chem.Mol,
     conf_id: int | None,
@@ -120,9 +146,9 @@ def build_edge_features(
     from the selected conformer. Hybrid mode concatenates both topologies,
     retaining every RDKit bond regardless of the spatial cutoff.
 
-    Reverse-edge expansion and removal of duplicate/self-loop edges belong
-    to T3.4. Chemical and geometric edge attributes are implemented by
-    subsequent tasks.
+    The returned edge_index is bidirectional, contains no duplicate directed
+    edges, and excludes self-loops. Chemical and geometric edge attributes
+    are implemented by subsequent tasks.
     """
     if not isinstance(config, GraphConfig):
         raise TypeError("config must be a GraphConfig instance.")
@@ -141,5 +167,6 @@ def build_edge_features(
         # Keep both sources intact. Duplicate removal and reverse edges are T3.4.
         edge_index = np.concatenate((covalent_edges, radius_edges), axis=1)
 
+    edge_index = _make_bidirectional_unique_edge_index(edge_index)
     edge_attr = np.empty((edge_index.shape[1], 0), dtype=np.float32)
     return edge_index, edge_attr

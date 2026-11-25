@@ -1,6 +1,7 @@
-"""Unit tests for RDKit covalent, radius, and hybrid edge topology (T3.1-T3.3)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge topology (T3.1-T3.4)."""
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from rdkit import Chem
@@ -82,7 +83,7 @@ class CovalentEdgeIndexTests(unittest.TestCase):
         self.assertEqual(edge_index.shape, (2, 1))
         self.assertEqual(edge_index.tolist(), [[0], [1]])
 
-    def test_public_builder_exposes_covalent_topology_and_empty_attributes(self):
+    def test_public_builder_returns_bidirectional_covalent_edges(self):
         molecule = Chem.MolFromSmiles("CCO")
         edge_index, edge_attr = build_edge_features(
             molecule,
@@ -90,8 +91,11 @@ class CovalentEdgeIndexTests(unittest.TestCase):
             config=GraphConfig(edge_mode="covalent"),
         )
 
-        self.assertEqual(edge_index.shape, (2, molecule.GetNumBonds()))
-        self.assertEqual(edge_attr.shape, (molecule.GetNumBonds(), 0))
+        np.testing.assert_array_equal(
+            edge_index,
+            np.asarray([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=np.int64),
+        )
+        self.assertEqual(edge_attr.shape, (4, 0))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_public_builder_requires_graph_config(self):
@@ -216,8 +220,8 @@ class RadiusEdgeIndexTests(unittest.TestCase):
             config=GraphConfig(edge_mode="radius", cutoff=1.5),
         )
 
-        self.assertEqual(edge_index.tolist(), [[0], [1]])
-        self.assertEqual(edge_attr.shape, (1, 0))
+        self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
+        self.assertEqual(edge_attr.shape, (2, 0))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_radius_mode_requires_a_conformer_id(self):
@@ -244,13 +248,17 @@ class HybridEdgeIndexTests(unittest.TestCase):
             config=GraphConfig(edge_mode="hybrid", cutoff=2.0),
         )
 
-        # Bond 0-1 lies outside the cutoff but must be retained. Pair 0-2
-        # is spatially close despite not being covalently bonded.
+        # Bond 0-1 lies outside the cutoff but is retained. Pair 0-2 is
+        # spatially close despite not being covalently bonded. Every pair
+        # appears once in each direction.
         np.testing.assert_array_equal(
             edge_index,
-            np.asarray([[0, 1, 0], [1, 2, 2]], dtype=np.int64),
+            np.asarray(
+                [[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]],
+                dtype=np.int64,
+            ),
         )
-        self.assertEqual(edge_attr.shape, (3, 0))
+        self.assertEqual(edge_attr.shape, (6, 0))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
 
     def test_hybrid_requires_the_selected_conformer(self):
@@ -262,21 +270,56 @@ class HybridEdgeIndexTests(unittest.TestCase):
                 config=GraphConfig(edge_mode="hybrid"),
             )
 
-    def test_hybrid_concatenates_sources_before_t34_deduplication(self):
+    def test_hybrid_deduplicates_overlap_and_expands_both_directions(self):
         molecule, conf_id = molecule_with_conformer(
             "CC",
             [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
         )
 
-        edge_index, _ = build_edge_features(
+        edge_index, edge_attr = build_edge_features(
             molecule,
             conf_id=conf_id,
             config=GraphConfig(edge_mode="hybrid", cutoff=2.0),
         )
 
-        # The same pair is present in both source topologies. T3.4 owns
-        # duplicate removal and bidirectional expansion.
-        self.assertEqual(edge_index.tolist(), [[0, 0], [1, 1]])
+        # The pair is present in both sources but occurs only once per
+        # direction in the final edge index.
+        self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
+        self.assertEqual(edge_attr.shape, (2, 0))
+
+
+    def test_public_builder_removes_self_loops_and_reversed_duplicates(self):
+        molecule = Chem.MolFromSmiles("CC")
+        raw_edges = np.asarray([[0, 1, 1], [1, 0, 1]], dtype=np.int64)
+
+        with patch(
+            "src.gnn.edge_features.build_covalent_edge_index",
+            return_value=raw_edges,
+        ):
+            edge_index, edge_attr = build_edge_features(
+                molecule,
+                conf_id=None,
+                config=GraphConfig(edge_mode="covalent"),
+            )
+
+        self.assertEqual(edge_index.tolist(), [[0, 1], [1, 0]])
+        self.assertEqual(edge_attr.shape, (2, 0))
+
+    def test_radius_public_builder_preserves_empty_bidirectional_shape(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (5.0, 0.0, 0.0)],
+        )
+
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(edge_mode="radius", cutoff=1.0),
+        )
+
+        self.assertEqual(edge_index.shape, (2, 0))
+        self.assertEqual(edge_index.dtype, np.dtype(np.int64))
+        self.assertEqual(edge_attr.shape, (0, 0))
 
 
 
