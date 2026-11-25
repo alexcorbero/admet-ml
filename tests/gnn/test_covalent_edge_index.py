@@ -584,18 +584,40 @@ class GeometricEdgeFeatureTests(unittest.TestCase):
         second.SetId(23)
         second_id = molecule.AddConformer(second, assignId=False)
 
+        config = GraphConfig(
+            edge_mode="covalent",
+            cutoff=4.0,
+            rbf_num_centers=5,
+        )
         _, first_attr = build_edge_features(
             molecule,
             conf_id=first_id,
-            config=GraphConfig(edge_mode="covalent", include_rbf=False),
+            config=config,
         )
         _, second_attr = build_edge_features(
             molecule,
             conf_id=second_id,
-            config=GraphConfig(edge_mode="covalent", include_rbf=False),
+            config=config,
         )
         np.testing.assert_allclose(first_attr[:, 25], [1.0, 1.0])
         np.testing.assert_allclose(second_attr[:, 25], [3.0, 3.0])
+        self.assertFalse(np.allclose(first_attr[:, 26:], second_attr[:, 26:]))
+
+
+    def test_distance_cast_rejects_values_outside_float32_range(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0e40, 0.0, 0.0)],
+        )
+        with self.assertRaisesRegex(ValueError, "float32 range"):
+            build_edge_features(
+                molecule,
+                conf_id=conf_id,
+                config=GraphConfig(
+                    edge_mode="covalent",
+                    include_rbf=False,
+                ),
+            )
 
     def test_spatial_edges_receive_distance_and_rbf_features(self):
         molecule, conf_id = molecule_with_conformer(

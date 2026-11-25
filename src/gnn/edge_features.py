@@ -251,7 +251,11 @@ def _build_geometric_edge_features(
 
     columns: list[np.ndarray] = []
     if include_distance:
-        columns.append(distances.astype(np.float32, copy=False).reshape(edge_count, 1))
+        with np.errstate(over="ignore", invalid="ignore"):
+            distance_column = distances.astype(np.float32, copy=False)
+        if not np.isfinite(distance_column).all():
+            raise ValueError("Edge distances exceed the finite float32 range.")
+        columns.append(distance_column.reshape(edge_count, 1))
 
     if include_rbf:
         centers = np.linspace(
@@ -285,7 +289,7 @@ def build_edge_features(
     conf_id: int | None,
     config: GraphConfig,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build edge topology and the chemical bond attributes currently in G7.
+    """Build edge topology and configured chemical/geometric edge attributes.
 
     Covalent mode reads RDKit bonds; radius mode reads spatial neighbors
     from the selected conformer. Hybrid mode concatenates both topologies,
