@@ -21,7 +21,7 @@
 ## Fase 2. Features de nodo (`src/gnn/atom_features.py`)
 
 - [x] **T2.1** Definir esquema y nombres de features.
-- [ ] **T2.2** Implementar hibridación one-hot.
+- [x] **T2.2** Implementar hibridación one-hot.
 - [ ] **T2.3** Implementar quiralidad/CIP.
 - [ ] **T2.4** Implementar carga, grado, H, masa, aromaticidad y anillo.
 - [ ] **T2.5** Implementar `build_atom_features()`.
