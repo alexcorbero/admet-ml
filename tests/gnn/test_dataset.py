@@ -1,4 +1,4 @@
-"""Tests for dataset-level raw graph generation (T6.2)."""
+"""Tests for dataset generation, persistence, and cache compatibility."""
 
 import unittest
 import pickle
@@ -13,6 +13,8 @@ from src.gnn.dataset import (
     build_graph_dataset_with_report,
     load_graph_dataset,
     save_graph_dataset,
+    validate_graph_dataset_compatibility,
+    GraphDatasetArtifact,
 )
 
 
@@ -223,6 +225,41 @@ class GraphDatasetTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             save_graph_dataset([], "graphs.pt", metadata=["invalid"])
+
+    def test_compatible_cache_matches_graph_config_id(self):
+        config = GNNConfig()
+        artifact = GraphDatasetArtifact(
+            graphs=["graph"],
+            metadata={"graph_config_id": config.graph_config_id},
+        )
+        validate_graph_dataset_compatibility(artifact, config)
+
+    def test_incompatible_cache_is_rejected(self):
+        config = GNNConfig()
+        artifact = GraphDatasetArtifact(
+            graphs=["graph"],
+            metadata={"graph_config_id": "different"},
+        )
+        with self.assertRaisesRegex(ValueError, "mismatch"):
+            validate_graph_dataset_compatibility(artifact, config)
+
+    def test_cache_without_config_id_is_rejected(self):
+        artifact = GraphDatasetArtifact(graphs=["graph"], metadata={})
+        with self.assertRaisesRegex(ValueError, "missing graph_config_id"):
+            validate_graph_dataset_compatibility(artifact, GNNConfig())
+
+    def test_load_with_config_validates_compatibility(self):
+        config = GNNConfig()
+        payload = {
+            "graphs": ["graph"],
+            "metadata": {"graph_config_id": config.graph_config_id},
+        }
+        fake_torch = types.SimpleNamespace(
+            load=lambda path, **_kwargs: payload,
+        )
+        with patch.dict("sys.modules", {"torch": fake_torch}):
+            artifact = load_graph_dataset("graphs.pt", config=config)
+        self.assertEqual(artifact.graphs, ["graph"])
 
 
 if __name__ == "__main__":

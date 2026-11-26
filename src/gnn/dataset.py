@@ -1,8 +1,8 @@
 """Dataset-level graph generation for G7.
 
-This module turns already prepared molecule records into raw PyG graphs and
-persists/loads those raw graphs. Failure accounting, cache validation, and
-subset selection remain separate responsibilities.
+This module turns already prepared molecule records into raw PyG graphs,
+persists/loads those raw graphs, and validates cache compatibility. Subset
+selection remains a separate responsibility.
 """
 
 from __future__ import annotations
@@ -238,11 +238,15 @@ def save_graph_dataset(
     return target
 
 
-def load_graph_dataset(path: str) -> GraphDatasetArtifact:
+def load_graph_dataset(
+    path: str,
+    *,
+    config: GNNConfig | None = None,
+) -> GraphDatasetArtifact:
     """Load a raw graph archive saved by :func:`save_graph_dataset`.
 
-    This validates only the persistence envelope. It deliberately does not
-    decide whether a cache is compatible with the current configuration.
+    This validates the persistence envelope. When ``config`` is supplied, the
+    cache is also checked against its graph-construction configuration.
     """
     from pathlib import Path
 
@@ -264,7 +268,38 @@ def load_graph_dataset(path: str) -> GraphDatasetArtifact:
     if not isinstance(metadata, Mapping):
         raise ValueError("graph archive field 'metadata' must be a mapping.")
 
-    return GraphDatasetArtifact(
+    artifact = GraphDatasetArtifact(
         graphs=graphs,
         metadata=dict(metadata),
     )
+    if config is not None:
+        validate_graph_dataset_compatibility(artifact, config)
+    return artifact
+
+
+def validate_graph_dataset_compatibility(
+    artifact: GraphDatasetArtifact,
+    config: GNNConfig,
+) -> None:
+    """Raise ``ValueError`` when an artifact is incompatible with ``config``.
+
+    The graph configuration ID is the canonical compatibility key. A missing
+    ID is incompatible rather than being treated as a legacy compatible
+    cache. Model and training settings are intentionally not checked here.
+    """
+    if not isinstance(artifact, GraphDatasetArtifact):
+        raise TypeError("artifact must be a GraphDatasetArtifact instance.")
+    if not isinstance(config, GNNConfig):
+        raise TypeError("config must be a GNNConfig instance.")
+
+    cache_id = artifact.metadata.get("graph_config_id")
+    if not isinstance(cache_id, str) or not cache_id:
+        raise ValueError(
+            "graph cache is incompatible: metadata is missing graph_config_id."
+        )
+    expected_id = config.graph_config_id
+    if cache_id != expected_id:
+        raise ValueError(
+            "graph cache is incompatible: graph_config_id mismatch; "
+            f"expected {expected_id}, got {cache_id}."
+        )

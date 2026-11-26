@@ -66,7 +66,7 @@
 - [x] **T6.1** Definir ID reproducible de configuración.
 - [x] **T6.2** Implementar generación de grafos del dataset.
 - [x] **T6.3** Registrar éxitos/fallos.
-- [ ] **T6.4** Implementar persistencia/carga.
+- [x] **T6.4** Implementar persistencia/carga.
 - [ ] **T6.5** Detectar caches incompatibles.
 - [ ] **T6.6** Implementar subsets por IDs de split.
 - [ ] **T6.7** Verificar que el cache contiene grafos crudos.
