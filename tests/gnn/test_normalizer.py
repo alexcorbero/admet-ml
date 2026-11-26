@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from src.gnn.config import AtomicFeaturesConfig, GNNConfig, GraphConfig
+from src.gnn.dataset import GraphDatasetArtifact, validate_raw_graph_dataset
 from src.gnn.density_features import get_density_feature_names
 from src.gnn.normalizer import (
     GraphFeatureNormalizer,
@@ -250,6 +251,7 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
             x_dg=np.empty((2, 0)),
             edge_attr=np.array([[1.0], [3.0]]),
             x=np.array([[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]]),
+            normalization_state="raw",
         )
         normalizer = GraphFeatureNormalizer.from_config(config).fit([graph])
 
@@ -262,6 +264,15 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
         np.testing.assert_allclose(transformed.edge_attr, [[-1.0], [1.0]])
         np.testing.assert_allclose(transformed.x, transformed.x_chem)
         np.testing.assert_allclose(graph.x_chem, [[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]])
+        self.assertEqual(graph.normalization_state, "raw")
+        self.assertEqual(transformed.normalization_state, "normalized")
+        with self.assertRaisesRegex(ValueError, "normalization_state='raw'"):
+            validate_raw_graph_dataset(
+                GraphDatasetArtifact(
+                    graphs=[transformed],
+                    metadata={"raw_graphs": True},
+                )
+            )
 
     def test_transform_graph_preserves_invalid_curvature_neutral_value_and_mask(self):
         atomic_config = AtomicFeaturesConfig(

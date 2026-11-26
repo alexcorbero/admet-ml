@@ -233,6 +233,9 @@ class GraphFeatureNormalizer:
                 transformed.x_chem,
                 transformed.x_dg,
             )
+        # A transformed graph must never remain eligible for the raw cache.
+        # T6.7 validates this provenance marker before persistence.
+        transformed.normalization_state = "normalized"
         return transformed
 
     def transform_graphs(self, graphs):
