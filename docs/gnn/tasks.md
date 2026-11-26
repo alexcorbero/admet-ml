@@ -68,7 +68,7 @@
 - [x] **T6.3** Registrar éxitos/fallos.
 - [x] **T6.4** Implementar persistencia/carga.
 - [x] **T6.5** Detectar caches incompatibles.
-- [ ] **T6.6** Implementar subsets por IDs de split.
+- [x] **T6.6** Implementar subsets por IDs de split.
 - [ ] **T6.7** Verificar que el cache contiene grafos crudos.
 
 ## Fase 7. Normalización (`src/gnn/normalizer.py`)

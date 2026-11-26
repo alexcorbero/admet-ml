@@ -14,6 +14,7 @@ from src.gnn.dataset import (
     load_graph_dataset,
     save_graph_dataset,
     select_graph_subset,
+    validate_raw_graph_dataset,
     validate_graph_dataset_compatibility,
     GraphDatasetArtifact,
 )
@@ -211,9 +212,10 @@ class GraphDatasetTests(unittest.TestCase):
         self.assertEqual(artifact.graphs, ["graph-a", "graph-b"])
         self.assertEqual(
             artifact.metadata,
-            {"graph_config_id": "abc", "n": 2},
+            {"graph_config_id": "abc", "n": 2, "raw_graphs": True},
         )
         self.assertEqual(saved_payloads[archive]["graphs"], ["graph-a", "graph-b"])
+        self.assertTrue(saved_payloads[archive]["metadata"]["raw_graphs"])
 
     def test_persistence_rejects_invalid_envelope_and_metadata(self):
         fake_torch = types.SimpleNamespace(
@@ -253,7 +255,10 @@ class GraphDatasetTests(unittest.TestCase):
         config = GNNConfig()
         payload = {
             "graphs": ["graph"],
-            "metadata": {"graph_config_id": config.graph_config_id},
+            "metadata": {
+                "graph_config_id": config.graph_config_id,
+                "raw_graphs": True,
+            },
         }
         fake_torch = types.SimpleNamespace(
             load=lambda path, **_kwargs: payload,
@@ -261,6 +266,25 @@ class GraphDatasetTests(unittest.TestCase):
         with patch.dict("sys.modules", {"torch": fake_torch}):
             artifact = load_graph_dataset("graphs.pt", config=config)
         self.assertEqual(artifact.graphs, ["graph"])
+
+    def test_save_rejects_false_raw_graph_marker(self):
+        with self.assertRaisesRegex(ValueError, "raw_graphs"):
+            save_graph_dataset([], "graphs.pt", metadata={"raw_graphs": False})
+
+    def test_raw_cache_requires_marker_and_rejects_normalized_graphs(self):
+        with self.assertRaisesRegex(ValueError, "raw_graphs=True"):
+            validate_raw_graph_dataset(
+                GraphDatasetArtifact(graphs=["graph"], metadata={})
+            )
+
+        normalized_graph = types.SimpleNamespace(normalized=True)
+        with self.assertRaisesRegex(ValueError, "graph 0 is normalized"):
+            validate_raw_graph_dataset(
+                GraphDatasetArtifact(
+                    graphs=[normalized_graph],
+                    metadata={"raw_graphs": True},
+                )
+            )
 
     def test_select_graph_subset_preserves_cache_order(self):
         graphs = [
