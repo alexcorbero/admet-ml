@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from src.gnn.config import AtomicFeaturesConfig, GNNConfig, GraphConfig
+from src.gnn.density_features import get_density_feature_names
 from src.gnn.normalizer import (
     GraphFeatureNormalizer,
     get_scalable_feature_columns,
@@ -141,6 +142,92 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "NaN or infinite"):
             normalizer.fit([bad_graph])
+
+    def test_fit_excludes_invalid_curvature_rows_from_statistics(self):
+        atomic_config = AtomicFeaturesConfig(
+            include_formal_charge=False,
+            include_heavy_atom_degree=False,
+            include_attached_hydrogens=False,
+            include_atomic_mass=False,
+            include_aromaticity=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+            density_enabled=True,
+            curvature_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((2.0, 1.0),),
+        )
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=False,
+                include_rbf=False,
+            ),
+            atomic_features=atomic_config,
+        )
+        names = get_density_feature_names(atomic_config)
+        x_dg = np.zeros((2, len(names)))
+        curvature_name = next(name for name in names if name.startswith("H_"))
+        mask_name = f"curvature_valid_{curvature_name[2:]}"
+        curvature_index = names.index(curvature_name)
+        mask_index = names.index(mask_name)
+        x_dg[:, curvature_index] = [100.0, 1.0]
+        for name_index, name in enumerate(names):
+            if name.startswith("curvature_valid_"):
+                x_dg[:, name_index] = 1.0
+        x_dg[:, mask_index] = [0.0, 1.0]
+
+        statistics = GraphFeatureNormalizer.from_config(config).fit(
+            [
+                SimpleNamespace(
+                    x_chem=np.empty((2, 0)),
+                    x_dg=x_dg,
+                    edge_attr=np.empty((2, 0)),
+                )
+            ]
+        ).statistics["x_dg"]
+
+        statistic_index = statistics.columns.index(curvature_name)
+        self.assertEqual(statistics.count[statistic_index], 1)
+        self.assertEqual(statistics.mean[statistic_index], 1.0)
+        self.assertEqual(statistics.std[statistic_index], 0.0)
+
+    def test_fit_rejects_non_binary_curvature_masks(self):
+        atomic_config = AtomicFeaturesConfig(
+            include_formal_charge=False,
+            include_heavy_atom_degree=False,
+            include_attached_hydrogens=False,
+            include_atomic_mass=False,
+            include_aromaticity=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+            density_enabled=True,
+            curvature_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((2.0, 1.0),),
+        )
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=False,
+                include_rbf=False,
+            ),
+            atomic_features=atomic_config,
+        )
+        names = get_density_feature_names(atomic_config)
+        x_dg = np.zeros((1, len(names)))
+        x_dg[:, names.index("curvature_valid_number_from_C_kernel_exponential_0")] = 2.0
+        graph = SimpleNamespace(
+            x_chem=np.empty((1, 0)),
+            x_dg=x_dg,
+            edge_attr=np.empty((1, 0)),
+        )
+        with self.assertRaisesRegex(ValueError, "binary values"):
+            GraphFeatureNormalizer.from_config(config).fit([graph])
 
 
 if __name__ == "__main__":

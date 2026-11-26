@@ -1,8 +1,8 @@
 """Column schema and train-only fitting for G7 graph-feature normalization.
 
 This module defines which raw feature columns are eligible for scaling and
-fits their train statistics. It does not transform graphs, handle curvature
-masks, or persist statistics; those responsibilities belong to later tasks.
+fits their train statistics. It does not transform graphs or persist
+statistics; those responsibilities belong to later tasks.
 """
 
 from __future__ import annotations
@@ -72,7 +72,9 @@ class FeatureStatistics:
     columns: tuple[str, ...]
     mean: np.ndarray
     std: np.ndarray
-    count: int
+    # A scalar is retained for unmasked groups for compatibility. DG groups
+    # can have a different number of valid rows per curvature column.
+    count: int | np.ndarray
 
 
 @dataclass
@@ -108,8 +110,8 @@ class GraphFeatureNormalizer:
 
         Statistics are computed independently for node and edge tensors. A
         configured group must provide at least one finite observation across
-        the training graphs. Curvature validity masks are not special-cased
-        here because that behavior is assigned to T7.3.
+        the training graphs. Curvature values only contribute when their
+        corresponding ``curvature_valid`` mask is active.
         """
         if isinstance(train_graphs, (str, bytes)):
             raise TypeError("train_graphs must be an iterable of graph objects.")
@@ -121,8 +123,10 @@ class GraphFeatureNormalizer:
             raise ValueError("train_graphs must contain at least one graph.")
 
         full_columns = _get_full_feature_columns(self.config)
-        values_by_group: dict[str, list[np.ndarray]] = {
-            group: [] for group, names in self.columns.items() if names
+        values_by_group: dict[str, list[list[np.ndarray]]] = {
+            group: [[] for _ in names]
+            for group, names in self.columns.items()
+            if names
         }
 
         for graph_index, graph in enumerate(graphs):
@@ -142,29 +146,56 @@ class GraphFeatureNormalizer:
                     )
                 selected_indices = [expected_names.index(name) for name in selected_names]
                 selected_values = values[:, selected_indices]
-                if selected_values.shape[0]:
-                    if not np.isfinite(selected_values).all():
+                for column_index, column_name in enumerate(selected_names):
+                    column_values = selected_values[:, column_index]
+                    if group == "x_dg" and _is_curvature_value(column_name):
+                        mask_name = _curvature_mask_name(column_name)
+                        mask_index = expected_names.index(mask_name)
+                        mask_values = values[:, mask_index]
+                        if not np.isfinite(mask_values).all() or not np.isin(
+                            mask_values, (0.0, 1.0)
+                        ).all():
+                            raise ValueError(
+                                f"graph {graph_index} field {group!r} has an "
+                                f"invalid {mask_name!r} mask; expected finite "
+                                "binary values."
+                            )
+                        column_values = column_values[mask_values.astype(bool)]
+                    if not np.isfinite(column_values).all():
                         raise ValueError(
                             f"graph {graph_index} field {group!r} contains "
                             "NaN or infinite values."
                         )
-                    values_by_group[group].append(selected_values)
+                    if column_values.size:
+                        values_by_group[group][column_index].append(column_values)
 
         fitted: dict[str, FeatureStatistics] = {}
         for group, selected_names in self.columns.items():
             if not selected_names:
                 continue
-            if not values_by_group[group]:
-                raise ValueError(f"no observations available for {group!r}.")
-            values = np.concatenate(values_by_group[group], axis=0).astype(
-                np.float64,
-                copy=False,
-            )
+            column_values = []
+            for column_name, observations in zip(
+                selected_names, values_by_group[group]
+            ):
+                if not observations:
+                    raise ValueError(
+                        f"no valid observations available for {group!r} "
+                        f"column {column_name!r}."
+                    )
+                column_values.append(
+                    np.concatenate(observations, axis=0).astype(
+                        np.float64,
+                        copy=False,
+                    )
+                )
+            means = np.array([np.mean(values) for values in column_values])
+            stds = np.array([np.std(values, ddof=0) for values in column_values])
+            counts = np.array([values.size for values in column_values], dtype=int)
             fitted[group] = FeatureStatistics(
                 columns=selected_names,
-                mean=np.mean(values, axis=0),
-                std=np.std(values, axis=0, ddof=0),
-                count=int(values.shape[0]),
+                mean=means,
+                std=stds,
+                count=_collapse_counts(counts),
             )
         self.statistics = fitted
         return self
@@ -261,6 +292,26 @@ def _get_full_feature_columns(config: GNNConfig) -> dict[str, tuple[str, ...]]:
         "x_dg": get_density_feature_names(atomic_config),
         "edge_attr": tuple(edge_attr),
     }
+
+
+def _is_curvature_value(name: str) -> bool:
+    """Return whether a DG column is a masked curvature value."""
+    return name.startswith(("H_", "K_", "kappa_min_", "kappa_max_"))
+
+
+def _curvature_mask_name(name: str) -> str:
+    """Return the validity-mask column paired with one curvature value."""
+    for prefix in ("H_", "K_", "kappa_min_", "kappa_max_"):
+        if name.startswith(prefix):
+            return f"curvature_valid_{name[len(prefix):]}"
+    raise ValueError(f"not a curvature value column: {name!r}")
+
+
+def _collapse_counts(counts: np.ndarray) -> int | np.ndarray:
+    """Keep a scalar count when every selected column has the same count."""
+    if np.all(counts == counts[0]):
+        return int(counts[0])
+    return counts
 
 
 def _as_float_matrix(value, *, group: str, graph_index: int) -> np.ndarray:

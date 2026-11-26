@@ -74,7 +74,7 @@
 ## Fase 7. Normalización (`src/gnn/normalizer.py`)
 
 - [x] **T7.1** Definir columnas escalables.
-- [ ] **T7.2** Implementar `fit(train_graphs)`.
+- [x] **T7.2** Implementar `fit(train_graphs)`.
 - [ ] **T7.3** Respetar máscaras de curvatura.
 - [ ] **T7.4** Implementar transformaciones.
 - [ ] **T7.5** Implementar guardado/carga de estadísticas.
