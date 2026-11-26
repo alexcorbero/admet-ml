@@ -8,6 +8,11 @@ except ModuleNotFoundError:  # pragma: no cover - environment dependent
     torch = None
 
 from src.gnn.config import GNNConfig, ModelConfig
+
+try:
+    from src.gnn.edge_features import get_edge_feature_names
+except ModuleNotFoundError:  # pragma: no cover - environment dependent
+    get_edge_feature_names = None
 from src.models.gnn import (
     AtomicNumberEmbedding,
     GINEMessagePassing,
@@ -79,14 +84,15 @@ class NodeFeatureEncoderTests(unittest.TestCase):
 
 
 @unittest.skipUnless(
-    torch is not None and torch_geometric is not None,
-    "PyTorch and PyTorch Geometric are not installed",
+    torch is not None
+    and torch_geometric is not None
+    and get_edge_feature_names is not None,
+    "PyTorch, PyTorch Geometric, and RDKit are not installed",
 )
 class GINEMessagePassingTests(unittest.TestCase):
     def test_uses_edge_index_and_edge_attr_to_return_node_states(self):
         config = GNNConfig()
-        # Default GraphConfig: distance plus 32 Gaussian RBF features.
-        edge_dim = 33
+        edge_dim = len(get_edge_feature_names(config.graph))
         layer = GINEMessagePassing(config.model.hidden_dim, edge_dim)
         x = torch.randn((3, config.model.hidden_dim), dtype=torch.float32)
         edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
@@ -108,8 +114,10 @@ class GINEMessagePassingTests(unittest.TestCase):
 
 
 @unittest.skipUnless(
-    torch is not None and torch_geometric is not None,
-    "PyTorch and PyTorch Geometric are not installed",
+    torch is not None
+    and torch_geometric is not None
+    and get_edge_feature_names is not None,
+    "PyTorch, PyTorch Geometric, and RDKit are not installed",
 )
 class GINEMessagePassingStackTests(unittest.TestCase):
     def test_applies_configured_layers_norm_activation_and_dropout(self):
@@ -120,10 +128,11 @@ class GINEMessagePassingStackTests(unittest.TestCase):
                 dropout=0.0,
             )
         )
-        stack = GINEMessagePassingStack.from_config(config, edge_dim=3)
+        edge_dim = len(get_edge_feature_names(config.graph))
+        stack = GINEMessagePassingStack.from_config(config, edge_dim=edge_dim)
         x = torch.randn((3, 8), dtype=torch.float32)
         edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
-        edge_attr = torch.randn((4, 3), dtype=torch.float32)
+        edge_attr = torch.randn((4, edge_dim), dtype=torch.float32)
 
         result = stack(x, edge_index, edge_attr)
 
