@@ -74,6 +74,117 @@ def density_field_derivatives(
     )
 
 
+def _number_density_from_geometry(
+    coords: np.ndarray,
+    mapped_symbols: np.ndarray,
+    atomic_radii: np.ndarray,
+    config: AtomicFeaturesConfig,
+) -> np.ndarray:
+    """Build the configured per-atom number-density columns.
+
+    This is deliberately limited to ``rho``. Curvature, validity masks,
+    charge weights, and numeric transformations belong to later tasks.
+    """
+    coords = np.asarray(coords, dtype=float)
+    mapped_symbols = np.asarray(mapped_symbols)
+    atomic_radii = np.asarray(atomic_radii, dtype=float)
+
+    n_atoms = len(coords)
+    columns: list[np.ndarray] = []
+
+    for source_element in _source_channels(config):
+        source_indices = np.flatnonzero(mapped_symbols == source_element)
+
+        for order, tau in config.dg_kernel_configs:
+            if source_indices.size == 0:
+                columns.append(np.zeros(n_atoms, dtype=float))
+                continue
+
+            source_coords = coords[source_indices]
+            source_radii = atomic_radii[source_indices]
+            source_weights = np.ones(source_indices.size, dtype=float)
+
+            differences = (
+                coords[:, None, :]
+                - source_coords[None, :, :]
+            )
+            distances = np.linalg.norm(differences, axis=2)
+            pair_radius_sums = (
+                atomic_radii[:, None]
+                + source_radii[None, :]
+            )
+
+            # Keep the G6 geometric exclusion: self/covalent-range pairs do
+            # not contribute to a local density channel.
+            allowed_mask = distances > pair_radius_sums
+            pair_scales = tau * pair_radius_sums
+
+            density, _, _ = density_field_derivatives(
+                evaluation_coords=coords,
+                source_coords=source_coords,
+                source_weights=source_weights,
+                pair_scales=pair_scales,
+                allowed_mask=allowed_mask,
+                kernel=config.dg_kernel,
+                order=order,
+            )
+            columns.append(np.asarray(density, dtype=float))
+
+    if not columns:
+        return np.empty((n_atoms, 0), dtype=float)
+
+    return np.column_stack(columns)
+
+
+def build_density_features(
+    mol,
+    conf_id: int,
+    config: AtomicFeaturesConfig,
+) -> np.ndarray:
+    """Return local per-atom number-density features as ``[N, F_dg]``.
+
+    Coordinates and van der Waals radii follow the existing G6 helpers, and
+    density values use the shared analytical G6 derivative implementation.
+    The current task intentionally supports only number density; charge and
+    curvature are rejected until their dedicated tasks are implemented.
+    """
+    if not isinstance(config, AtomicFeaturesConfig):
+        raise TypeError("config must be an AtomicFeaturesConfig instance.")
+
+    n_atoms = int(mol.GetNumAtoms())
+    if not config.density_enabled:
+        return np.empty((n_atoms, 0), dtype=np.float32)
+
+    if config.curvature_enabled:
+        raise NotImplementedError(
+            "curvature features are implemented in T4.5 and later."
+        )
+    if config.density_types != ("number",):
+        raise NotImplementedError(
+            "charge density features are implemented in T4.4 and later."
+        )
+
+    from src.features.descriptors_3d import get_coordinates
+    from src.features.dg_gl_features import get_vdw_radii
+    from src.features.density_features import get_mapped_atom_symbols
+
+    coords = get_coordinates(mol=mol, conf_id=conf_id)
+    mapped_symbols = get_mapped_atom_symbols(
+        mol=mol,
+        elements=list(config.density_elements),
+        other_label=config.other_label,
+    )
+    atomic_radii = get_vdw_radii(mol=mol)
+
+    density = _number_density_from_geometry(
+        coords=coords,
+        mapped_symbols=mapped_symbols,
+        atomic_radii=atomic_radii,
+        config=config,
+    )
+    return np.asarray(density, dtype=np.float32)
+
+
 def get_density_feature_names(
     config: AtomicFeaturesConfig,
 ) -> tuple[str, ...]:
