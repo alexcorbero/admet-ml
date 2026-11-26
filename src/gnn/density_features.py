@@ -234,6 +234,23 @@ def _curvature_from_geometry(
     return np.column_stack(columns)
 
 
+def _validate_density_feature_matrix(
+    features: np.ndarray,
+    n_atoms: int,
+    config: AtomicFeaturesConfig,
+) -> np.ndarray:
+    """Validate the public ``x_dg`` shape and numeric domain."""
+    expected_shape = (n_atoms, len(get_density_feature_names(config)))
+    if features.ndim != 2 or features.shape != expected_shape:
+        raise ValueError(
+            "density features must have shape "
+            f"{expected_shape}; got {features.shape}."
+        )
+    if not np.all(np.isfinite(features)):
+        raise ValueError("density features must contain only finite values.")
+    return features
+
+
 def build_density_features(
     mol,
     conf_id: int,
@@ -254,7 +271,11 @@ def build_density_features(
 
     n_atoms = int(mol.GetNumAtoms())
     if not config.density_enabled:
-        return np.empty((n_atoms, 0), dtype=np.float32)
+        return _validate_density_feature_matrix(
+            np.empty((n_atoms, 0), dtype=np.float32),
+            n_atoms=n_atoms,
+            config=config,
+        )
 
     from src.features.descriptors_3d import get_coordinates
     from src.features.dg_gl_features import get_vdw_radii
@@ -329,7 +350,12 @@ def build_density_features(
     else:
         density = np.column_stack(density_columns)
 
-    return np.asarray(density, dtype=np.float32)
+    features = np.asarray(density, dtype=np.float32)
+    return _validate_density_feature_matrix(
+        features,
+        n_atoms=n_atoms,
+        config=config,
+    )
 
 
 def get_density_feature_names(

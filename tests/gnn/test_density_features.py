@@ -12,6 +12,88 @@ from src.gnn.density_features import build_density_features
 
 
 class DensityFeatureBuildTests(unittest.TestCase):
+    def test_rejects_non_finite_density_features(self):
+        coords = np.asarray([[0.0, 0.0, 0.0]])
+        mapped_symbols = np.asarray(["C"])
+
+        g6_module = types.ModuleType("src.features.dg_gl_features")
+        g6_module.radial_kernel_derivatives = Mock()
+        g6_module.density_field_derivatives = Mock(
+            return_value=(
+                np.asarray([np.nan]),
+                np.zeros((1, 3)),
+                np.zeros((1, 3, 3)),
+            )
+        )
+        g6_module.get_vdw_radii = Mock(return_value=np.asarray([1.0]))
+
+        coordinates_module = types.ModuleType("src.features.descriptors_3d")
+        coordinates_module.get_coordinates = Mock(return_value=coords)
+        source_module = types.ModuleType("src.features.density_features")
+        source_module.get_mapped_atom_symbols = Mock(
+            return_value=mapped_symbols
+        )
+
+        mol = Mock()
+        mol.GetNumAtoms.return_value = 1
+        config = AtomicFeaturesConfig(
+            density_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((3.0, 0.5),),
+        )
+
+        with patch.dict(
+            sys.modules,
+            {
+                "src.features.dg_gl_features": g6_module,
+                "src.features.descriptors_3d": coordinates_module,
+                "src.features.density_features": source_module,
+            },
+        ):
+            with self.assertRaisesRegex(ValueError, "finite"):
+                build_density_features(mol, conf_id=0, config=config)
+
+    def test_rejects_density_features_with_wrong_shape(self):
+        coords = np.asarray([[0.0, 0.0, 0.0]])
+        mapped_symbols = np.asarray(["C"])
+
+        g6_module = types.ModuleType("src.features.dg_gl_features")
+        g6_module.radial_kernel_derivatives = Mock()
+        g6_module.density_field_derivatives = Mock(
+            return_value=(
+                np.asarray([[1.0, 2.0]]),
+                np.zeros((1, 3)),
+                np.zeros((1, 3, 3)),
+            )
+        )
+        g6_module.get_vdw_radii = Mock(return_value=np.asarray([1.0]))
+
+        coordinates_module = types.ModuleType("src.features.descriptors_3d")
+        coordinates_module.get_coordinates = Mock(return_value=coords)
+        source_module = types.ModuleType("src.features.density_features")
+        source_module.get_mapped_atom_symbols = Mock(
+            return_value=mapped_symbols
+        )
+
+        mol = Mock()
+        mol.GetNumAtoms.return_value = 1
+        config = AtomicFeaturesConfig(
+            density_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((3.0, 0.5),),
+        )
+
+        with patch.dict(
+            sys.modules,
+            {
+                "src.features.dg_gl_features": g6_module,
+                "src.features.descriptors_3d": coordinates_module,
+                "src.features.density_features": source_module,
+            },
+        ):
+            with self.assertRaisesRegex(ValueError, "shape"):
+                build_density_features(mol, conf_id=0, config=config)
+
     def test_builds_one_column_per_source_and_kernel_in_name_order(self):
         coords = np.asarray(
             [
