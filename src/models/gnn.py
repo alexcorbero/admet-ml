@@ -455,6 +455,10 @@ class MolecularGNN(_MolecularGNNBase):
         )
         return self.pooling(node_states, batch)
 
+    def forward(self, data):
+        """Return one scalar prediction per graph and retain autograd flow."""
+        return self.readout(self.encode(data))
+
 
 # Descriptive alias for callers that use the convolution terminology.
 GINEConvLayer = GINEMessagePassing

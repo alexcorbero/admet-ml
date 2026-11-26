@@ -90,7 +90,7 @@
 - [x] **T8.5** Implementar residuals.
 - [x] **T8.6** Implementar pooling.
 - [x] **T8.7** Implementar readout.
-- [ ] **T8.8** Implementar `encode()`.
+- [x] **T8.8** Implementar `encode()`.
 - [ ] **T8.9** Probar forward/backward.
 - [ ] **T8.10** Verificar shapes y parámetros.
 

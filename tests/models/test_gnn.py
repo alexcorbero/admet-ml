@@ -275,6 +275,35 @@ class MolecularGNNEncodeTests(unittest.TestCase):
 
         self.assertEqual(tuple(embedding.shape), (1, 4))
 
+    def test_forward_and_backward_produce_finite_gradients(self):
+        config = GNNConfig(
+            model=ModelConfig(
+                hidden_dim=8,
+                num_message_passing_layers=1,
+                dropout=0.0,
+                residual_connections=False,
+            )
+        )
+        edge_dim = len(get_edge_feature_names(config.graph))
+        model = MolecularGNN(config, edge_dim=edge_dim)
+        data = SimpleNamespace(
+            z=torch.tensor([6, 8, 17], dtype=torch.long),
+            x=torch.randn((3, 5), dtype=torch.float32),
+            edge_index=torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long),
+            edge_attr=torch.randn((4, edge_dim), dtype=torch.float32),
+            batch=torch.tensor([0, 0, 1], dtype=torch.long),
+        )
+
+        predictions = model(data)
+        loss = (predictions - torch.tensor([[0.5], [-0.5]])).square().mean()
+        loss.backward()
+
+        self.assertEqual(tuple(predictions.shape), (2, 1))
+        self.assertTrue(torch.isfinite(loss).item())
+        gradients = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
+        self.assertTrue(gradients)
+        self.assertTrue(all(torch.isfinite(gradient).all().item() for gradient in gradients))
+
 
 if __name__ == "__main__":
     unittest.main()
