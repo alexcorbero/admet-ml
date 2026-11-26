@@ -257,6 +257,7 @@ class GraphFeatureNormalizer:
         self._require_fitted()
         return {
             "format_version": 1,
+            "graph_config_id": self.config.graph_config_id,
             "columns": {
                 group: list(names) for group, names in self.columns.items()
             },
@@ -282,6 +283,10 @@ class GraphFeatureNormalizer:
             raise ValueError("unsupported normalizer format version.")
 
         normalizer = cls.from_config(config)
+        if payload.get("graph_config_id") != config.graph_config_id:
+            raise ValueError(
+                "normalizer graph_config_id is incompatible with config."
+            )
         expected_columns = {
             group: list(names) for group, names in normalizer.columns.items()
         }

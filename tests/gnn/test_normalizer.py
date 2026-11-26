@@ -357,6 +357,7 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
             restored = GraphFeatureNormalizer.load(path, config)
 
         self.assertEqual(restored.to_dict(), fitted.to_dict())
+        self.assertEqual(restored.to_dict()["graph_config_id"], config.graph_config_id)
         np.testing.assert_allclose(
             restored.transform_graph(graph).x_chem,
             fitted.transform_graph(graph).x_chem,
@@ -387,6 +388,101 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "incompatible"):
             GraphFeatureNormalizer.from_dict(incompatible, payload)
+
+    def test_load_rejects_graph_configuration_with_same_column_names(self):
+        base_atomic = AtomicFeaturesConfig(
+            include_aromaticity=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+        )
+        base_config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=True,
+                include_rbf=False,
+                cutoff=5.0,
+            ),
+            atomic_features=base_atomic,
+        )
+        base_graph = SimpleNamespace(
+            x_chem=np.array([[1.0, 2.0, 3.0, 4.0]]),
+            x_dg=np.empty((1, 0)),
+            edge_attr=np.array([[1.0]]),
+        )
+        payload = GraphFeatureNormalizer.from_config(base_config).fit(
+            [base_graph]
+        ).to_dict()
+        changed_cutoff = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=True,
+                include_rbf=False,
+                cutoff=6.0,
+            ),
+            atomic_features=base_atomic,
+        )
+
+        with self.assertRaisesRegex(ValueError, "graph_config_id"):
+            GraphFeatureNormalizer.from_dict(changed_cutoff, payload)
+
+    def test_load_rejects_dg_parameters_with_same_feature_names(self):
+        base_atomic = AtomicFeaturesConfig(
+            include_formal_charge=False,
+            include_heavy_atom_degree=False,
+            include_attached_hydrogens=False,
+            include_atomic_mass=False,
+            include_aromaticity=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+            density_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((2.0, 1.0),),
+        )
+        base_config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=False,
+                include_rbf=False,
+            ),
+            atomic_features=base_atomic,
+        )
+        base_graph = SimpleNamespace(
+            x_chem=np.empty((1, 0)),
+            x_dg=np.array([[1.0, 2.0]]),
+            edge_attr=np.empty((1, 0)),
+        )
+        payload = GraphFeatureNormalizer.from_config(base_config).fit(
+            [base_graph]
+        ).to_dict()
+        changed_atomic = AtomicFeaturesConfig(
+            include_formal_charge=False,
+            include_heavy_atom_degree=False,
+            include_attached_hydrogens=False,
+            include_atomic_mass=False,
+            include_aromaticity=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+            density_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((2.0, 2.0),),
+        )
+        changed_config = GNNConfig(
+            graph=base_config.graph,
+            atomic_features=changed_atomic,
+        )
+
+        self.assertEqual(
+            get_scalable_feature_columns(base_config),
+            get_scalable_feature_columns(changed_config),
+        )
+        with self.assertRaisesRegex(ValueError, "graph_config_id"):
+            GraphFeatureNormalizer.from_dict(changed_config, payload)
 
     def test_fit_and_transform_do_not_leak_validation_features(self):
         config = GNNConfig(
