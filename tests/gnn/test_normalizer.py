@@ -388,6 +388,48 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incompatible"):
             GraphFeatureNormalizer.from_dict(incompatible, payload)
 
+    def test_fit_and_transform_do_not_leak_validation_features(self):
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=True,
+                include_rbf=False,
+            ),
+            atomic_features=AtomicFeaturesConfig(
+                include_aromaticity=False,
+                include_ring_membership=False,
+                include_hybridization=False,
+                include_chirality=False,
+                include_cip=False,
+            ),
+        )
+        train_graph = SimpleNamespace(
+            x_chem=np.array([[1.0, 2.0, 3.0, 4.0]]),
+            x_dg=np.empty((1, 0)),
+            edge_attr=np.array([[1.0]]),
+            x=np.array([[1.0, 2.0, 3.0, 4.0]]),
+            y=np.array([0.1]),
+        )
+        validation_graph = SimpleNamespace(
+            x_chem=np.array([[1000.0, 2000.0, 3000.0, 4000.0]]),
+            x_dg=np.empty((1, 0)),
+            edge_attr=np.array([[1000.0]]),
+            x=np.array([[1000.0, 2000.0, 3000.0, 4000.0]]),
+            y=np.array([-999999.0]),
+        )
+
+        normalizer = GraphFeatureNormalizer.from_config(config).fit([train_graph])
+        train_statistics = normalizer.to_dict()
+        transformed_validation = normalizer.transform_graph(validation_graph)
+
+        np.testing.assert_allclose(
+            normalizer.statistics["x_chem"].mean,
+            [1.0, 2.0, 3.0, 4.0],
+        )
+        np.testing.assert_allclose(normalizer.statistics["edge_attr"].mean, [1.0])
+        self.assertNotEqual(transformed_validation.x_chem[0, 0], 1000.0)
+        self.assertEqual(normalizer.to_dict(), train_statistics)
+
 
 if __name__ == "__main__":
     unittest.main()
