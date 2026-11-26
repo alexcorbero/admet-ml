@@ -96,6 +96,15 @@ class AtomicFeaturesConfigTests(unittest.TestCase):
         self.assertEqual(exponential.dg_kernel_configs, ((3.5, 0.3), (2.5, 1.3)))
         self.assertEqual(lorentz.dg_kernel_configs, ((3.0, 1.3), (6.5, 0.3)))
 
+    def test_density_transform_is_normalized_and_validated(self):
+        self.assertEqual(
+            AtomicFeaturesConfig(density_transform="SIGNED_LOG1P").density_transform,
+            "signed_log1p",
+        )
+        for value in ("log", "", None, 1):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                AtomicFeaturesConfig(density_transform=value)
+
     def test_explicit_dg_configs_override_kernel_defaults(self):
         explicit = ((4.0, 0.5),)
         config = AtomicFeaturesConfig(dg_kernel="lorentz", dg_kernel_configs=explicit)

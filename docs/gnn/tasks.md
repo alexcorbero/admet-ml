@@ -47,7 +47,7 @@
 - [x] **T4.4** Implementar densidad por carga opcional.
 - [x] **T4.5** Implementar `H`, `K`, `kappa_min`, `kappa_max`.
 - [x] **T4.6** Implementar máscaras de validez.
-- [ ] **T4.7** Implementar valor neutro para curvatura inválida.
+- [x] **T4.7** Implementar valor neutro para curvatura inválida.
 - [ ] **T4.8** Implementar transformación numérica configurable.
 - [ ] **T4.9** Verificar shapes y ausencia de NaN/Inf.
 - [ ] **T4.10** Añadir tests de `Other`, canales ausentes y singularidades.

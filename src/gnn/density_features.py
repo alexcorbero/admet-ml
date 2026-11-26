@@ -23,6 +23,19 @@ _CURVATURE_VALUE_NAMES = (
 )
 
 
+def _apply_numeric_transform(
+    values: np.ndarray,
+    transform: str,
+) -> np.ndarray:
+    """Apply a configured transform to continuous DG values only."""
+    values = np.asarray(values, dtype=float)
+    if transform == "identity":
+        return values
+    if transform == "signed_log1p":
+        return np.sign(values) * np.log1p(np.abs(values))
+    raise ValueError(f"Unsupported density transform: {transform!r}.")
+
+
 def _source_channels(config: AtomicFeaturesConfig) -> tuple[str, ...]:
     """Return configured source-element channels, including ``Other``."""
     return (*config.density_elements, config.other_label)
@@ -233,6 +246,8 @@ def build_density_features(
     Number and optional charge density are supported here. When enabled,
     curvature values and their validity masks are emitted per local source
     channel; invalid curvature values use the configured neutral value.
+    Continuous values use the configured numeric transformation, while
+    ``curvature_valid`` remains an untransformed binary feature.
     """
     if not isinstance(config, AtomicFeaturesConfig):
         raise TypeError("config must be an AtomicFeaturesConfig instance.")
@@ -271,6 +286,10 @@ def build_density_features(
             atom_weights=atom_weights,
             config=config,
         )
+        density_matrix = _apply_numeric_transform(
+            density_matrix,
+            config.density_transform,
+        )
         curvature_matrix = (
             _curvature_from_geometry(
                 coords=coords,
@@ -289,6 +308,14 @@ def build_density_features(
             n_channels = len(_source_channels(config)) * len(
                 config.dg_kernel_configs
             )
+            for channel_index in range(n_channels):
+                curvature_start = channel_index * len(_CURVATURE_FEATURE_NAMES)
+                for value_offset in range(len(_CURVATURE_VALUE_NAMES)):
+                    column_index = curvature_start + value_offset
+                    curvature_matrix[:, column_index] = _apply_numeric_transform(
+                        curvature_matrix[:, column_index],
+                        config.density_transform,
+                    )
             for channel_index in range(n_channels):
                 density_columns.append(density_matrix[:, channel_index])
                 curvature_start = channel_index * len(_CURVATURE_FEATURE_NAMES)

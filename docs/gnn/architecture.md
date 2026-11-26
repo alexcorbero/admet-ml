@@ -135,6 +135,10 @@ GNNConfig
 
 Debe ser serializable y no depender de RDKit/PyTorch.
 
+`AtomicFeaturesConfig.density_transform` controla la transformación numérica
+de las features DG continuas (`identity` o `signed_log1p`). Las máscaras de
+validez no se transforman.
+
 ### `atom_features.py`
 
 API:

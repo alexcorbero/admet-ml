@@ -20,6 +20,7 @@ from typing import Any
 _EDGE_MODES = {"covalent", "radius", "hybrid"}
 _DG_KERNELS = {"exponential", "lorentz"}
 _DENSITY_TYPES = {"number", "charge"}
+_DENSITY_TRANSFORMS = {"identity", "signed_log1p"}
 
 _DEFAULT_HYBRIDIZATION_TYPES = (
     "S",
@@ -232,6 +233,7 @@ class AtomicFeaturesConfig:
     )
     other_label: str = "Other"
     curvature_neutral_value: float = 0.0
+    density_transform: str = "identity"
 
     def __post_init__(self) -> None:
         boolean_fields = (
@@ -261,6 +263,15 @@ class AtomicFeaturesConfig:
             )
         if self.curvature_enabled and not self.density_enabled:
             raise ValueError("curvature_enabled requires density_enabled=True.")
+
+        if not isinstance(self.density_transform, str):
+            raise ValueError("density_transform must be a string.")
+        density_transform = self.density_transform.lower()
+        if density_transform not in _DENSITY_TRANSFORMS:
+            raise ValueError(
+                "density_transform must be one of "
+                f"{sorted(_DENSITY_TRANSFORMS)}; got {self.density_transform!r}."
+            )
 
         hybridization_types = _as_string_tuple(
             self.hybridization_types,
@@ -324,6 +335,7 @@ class AtomicFeaturesConfig:
         object.__setattr__(self, "density_elements", density_elements)
         object.__setattr__(self, "other_label", other_label)
         object.__setattr__(self, "curvature_neutral_value", curvature_neutral_value)
+        object.__setattr__(self, "density_transform", density_transform)
 
 
 @dataclass(frozen=True)

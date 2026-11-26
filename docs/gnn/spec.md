@@ -142,6 +142,14 @@ Kernels admitidos:
 - `exponential`;
 - `lorentz`.
 
+La transformación numérica de las features continuas DG es configurable:
+
+- `identity`;
+- `signed_log1p`, aplicada como `sign(x) * log1p(abs(x))`.
+
+La transformación se aplica a `rho` y a las curvaturas, pero no a la máscara
+binaria `curvature_valid`.
+
 ### 3.3. Aristas
 
 Modos soportados:
