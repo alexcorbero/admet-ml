@@ -1,4 +1,4 @@
-"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.8)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.9)."""
 
 from dataclasses import fields
 import inspect
@@ -775,6 +775,67 @@ class EdgeFeatureNameTests(unittest.TestCase):
     def test_invalid_config_is_rejected(self):
         with self.assertRaises(TypeError):
             get_edge_feature_names(None)
+
+
+class EdgeModeTests(unittest.TestCase):
+    def test_public_builder_implements_each_edge_mode(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CCO",
+            [(0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+        expected = {
+            "covalent": {
+                "edges": ((0, 1), (1, 0), (1, 2), (2, 1)),
+                "is_bonded": (1.0, 1.0, 1.0, 1.0),
+            },
+            "radius": {
+                "edges": ((0, 2), (2, 0)),
+                "is_bonded": (0.0, 0.0),
+            },
+            "hybrid": {
+                "edges": (
+                    (0, 1),
+                    (1, 0),
+                    (0, 2),
+                    (2, 0),
+                    (1, 2),
+                    (2, 1),
+                ),
+                "is_bonded": (1.0, 1.0, 0.0, 0.0, 1.0, 1.0),
+            },
+        }
+
+        for edge_mode, expectation in expected.items():
+            with self.subTest(edge_mode=edge_mode):
+                config = GraphConfig(
+                    edge_mode=edge_mode,
+                    cutoff=1.5,
+                    include_distance=False,
+                    include_rbf=False,
+                )
+                edge_index, edge_attr = build_edge_features(
+                    molecule,
+                    conf_id=conf_id,
+                    config=config,
+                )
+                edges = tuple(
+                    (int(source), int(target)) for source, target in edge_index.T
+                )
+
+                self.assertEqual(edges, expectation["edges"])
+                self.assertEqual(
+                    edge_attr.shape,
+                    (len(edges), len(get_edge_feature_names(config))),
+                )
+                self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+                self.assertTrue(np.isfinite(edge_attr).all())
+                np.testing.assert_array_equal(edge_attr[:, 0], expectation["is_bonded"])
+                self.assertEqual(len(edges), len(set(edges)))
+                self.assertTrue(all(source != target for source, target in edges))
+                self.assertEqual(
+                    {(target, source) for source, target in edges},
+                    set(edges),
+                )
 
 
 

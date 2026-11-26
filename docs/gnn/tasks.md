@@ -36,7 +36,7 @@
 - [x] **T3.5** Implementar atributos químicos de enlace.
 - [x] **T3.6** Implementar distancia y Gaussian RBF.
 - [x] **T3.7** Verificar que los kernels exponential/Lorentz no forman parte de `edge_attr`; pertenecen a densidad/DG (Fase 4).
-- [ ] **T3.8** Implementar naming de `edge_attr`.
+- [x] **T3.8** Implementar naming de `edge_attr`.
 - [ ] **T3.9** Añadir tests de los tres modos.
 
 ## Fase 4. Densidad y curvatura (`src/gnn/density_features.py`)
