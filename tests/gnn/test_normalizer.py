@@ -1,6 +1,7 @@
 """Tests for the T7.1 scalable-column schema."""
 
 import unittest
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import numpy as np
@@ -316,6 +317,65 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
         normalizer = GraphFeatureNormalizer.from_config(GNNConfig())
         with self.assertRaisesRegex(RuntimeError, "fitted"):
             normalizer.transform_graph(SimpleNamespace())
+
+    def test_save_load_roundtrip_preserves_statistics_and_transforms(self):
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=True,
+                include_rbf=False,
+            ),
+            atomic_features=AtomicFeaturesConfig(
+                include_aromaticity=False,
+                include_ring_membership=False,
+                include_hybridization=False,
+                include_chirality=False,
+                include_cip=False,
+            ),
+        )
+        graph = SimpleNamespace(
+            x_chem=np.array([[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]]),
+            x_dg=np.empty((2, 0)),
+            edge_attr=np.array([[1.0], [3.0]]),
+            x=np.array([[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]]),
+        )
+        fitted = GraphFeatureNormalizer.from_config(config).fit([graph])
+
+        with TemporaryDirectory() as directory:
+            path = fitted.save(f"{directory}/normalizer.json")
+            restored = GraphFeatureNormalizer.load(path, config)
+
+        self.assertEqual(restored.to_dict(), fitted.to_dict())
+        np.testing.assert_allclose(
+            restored.transform_graph(graph).x_chem,
+            fitted.transform_graph(graph).x_chem,
+        )
+
+    def test_load_rejects_incompatible_config(self):
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=True,
+                include_rbf=False,
+            ),
+            atomic_features=AtomicFeaturesConfig(
+                include_aromaticity=False,
+                include_ring_membership=False,
+                include_hybridization=False,
+                include_chirality=False,
+                include_cip=False,
+            ),
+        )
+        graph = SimpleNamespace(
+            x_chem=np.array([[1.0, 2.0, 3.0, 10.0]]),
+            x_dg=np.empty((1, 0)),
+            edge_attr=np.array([[1.0]]),
+        )
+        payload = GraphFeatureNormalizer.from_config(config).fit([graph]).to_dict()
+        incompatible = GNNConfig()
+
+        with self.assertRaisesRegex(ValueError, "incompatible"):
+            GraphFeatureNormalizer.from_dict(incompatible, payload)
 
 
 if __name__ == "__main__":

@@ -1,14 +1,16 @@
 """Column schema and train-only fitting for G7 graph-feature normalization.
 
-This module defines which raw feature columns are eligible for scaling and
-fits their train statistics. It does not transform graphs or persist
-statistics; those responsibilities belong to later tasks.
+This module defines which raw feature columns are eligible for scaling,
+fits their train statistics, and persists those statistics. It does not
+persist graphs or training data.
 """
 
 from __future__ import annotations
 
 from copy import copy
 from dataclasses import dataclass, field
+import json
+from pathlib import Path
 from typing import Final
 
 import numpy as np
@@ -247,6 +249,99 @@ class GraphFeatureNormalizer:
         if not self.fitted:
             raise RuntimeError("GraphFeatureNormalizer must be fitted before transforming.")
 
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable representation of fitted statistics."""
+        self._require_fitted()
+        return {
+            "format_version": 1,
+            "columns": {
+                group: list(names) for group, names in self.columns.items()
+            },
+            "statistics": {
+                group: {
+                    "columns": list(statistics.columns),
+                    "mean": statistics.mean.tolist(),
+                    "std": statistics.std.tolist(),
+                    "count": _json_count(statistics.count),
+                }
+                for group, statistics in self.statistics.items()
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, config: GNNConfig, payload: dict) -> "GraphFeatureNormalizer":
+        """Restore fitted statistics from a dictionary and validate its schema."""
+        if not isinstance(config, GNNConfig):
+            raise TypeError("config must be a GNNConfig instance.")
+        if not isinstance(payload, dict):
+            raise TypeError("normalizer payload must be a dictionary.")
+        if payload.get("format_version") != 1:
+            raise ValueError("unsupported normalizer format version.")
+
+        normalizer = cls.from_config(config)
+        expected_columns = {
+            group: list(names) for group, names in normalizer.columns.items()
+        }
+        if payload.get("columns") != expected_columns:
+            raise ValueError("normalizer columns are incompatible with config.")
+
+        raw_statistics = payload.get("statistics")
+        if not isinstance(raw_statistics, dict) or not raw_statistics:
+            raise ValueError("normalizer payload must contain statistics.")
+        statistics: dict[str, FeatureStatistics] = {}
+        for group, raw in raw_statistics.items():
+            if group not in normalizer.columns or not isinstance(raw, dict):
+                raise ValueError(f"invalid normalizer statistics for {group!r}.")
+            columns = tuple(raw.get("columns", ()))
+            if columns != normalizer.columns[group]:
+                raise ValueError(f"normalizer statistics columns mismatch for {group!r}.")
+            mean = _load_statistic_array(raw.get("mean"), group=group, name="mean")
+            std = _load_statistic_array(raw.get("std"), group=group, name="std")
+            if mean.shape != std.shape or mean.shape != (len(columns),):
+                raise ValueError(f"normalizer statistics shape mismatch for {group!r}.")
+            if not np.isfinite(mean).all() or not np.isfinite(std).all() or (std < 0).any():
+                raise ValueError(f"normalizer statistics are not finite for {group!r}.")
+            count = _load_count(raw.get("count"), expected_size=len(columns))
+            statistics[group] = FeatureStatistics(
+                columns=columns,
+                mean=mean,
+                std=std,
+                count=_collapse_counts(count),
+            )
+        expected_groups = {group for group, names in normalizer.columns.items() if names}
+        if set(statistics) != expected_groups:
+            raise ValueError("normalizer statistics groups are incompatible with config.")
+        normalizer.statistics = statistics
+        return normalizer
+
+    def save(self, path: str | Path) -> Path:
+        """Save fitted statistics as a versioned UTF-8 JSON artifact."""
+        target = Path(path)
+        target.write_text(
+            json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return target
+
+    def save_json(self, path: str | Path) -> Path:
+        """Compatibility alias for :meth:`save`."""
+        return self.save(path)
+
+    @classmethod
+    def load(cls, path: str | Path, config: GNNConfig) -> "GraphFeatureNormalizer":
+        """Load a JSON statistics artifact for ``config``."""
+        source = Path(path)
+        try:
+            payload = json.loads(source.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid normalizer JSON: {source}") from exc
+        return cls.from_dict(config, payload)
+
+    @classmethod
+    def load_json(cls, path: str | Path, config: GNNConfig) -> "GraphFeatureNormalizer":
+        """Compatibility alias for :meth:`load`."""
+        return cls.load(path, config)
+
 
 def get_scalable_feature_columns(
     config: GNNConfig,
@@ -358,6 +453,45 @@ def _collapse_counts(counts: np.ndarray) -> int | np.ndarray:
     """Keep a scalar count when every selected column has the same count."""
     if np.all(counts == counts[0]):
         return int(counts[0])
+    return counts
+
+
+def _json_count(count: int | np.ndarray) -> int | list[int]:
+    """Convert a scalar or per-column count to JSON-native values."""
+    if isinstance(count, np.ndarray):
+        return [int(value) for value in count.tolist()]
+    return int(count)
+
+
+def _load_statistic_array(value, *, group: str, name: str) -> np.ndarray:
+    """Load one one-dimensional finite statistic vector."""
+    try:
+        array = np.asarray(value, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid {name} statistics for {group!r}.") from exc
+    if array.ndim != 1:
+        raise ValueError(f"{name} statistics for {group!r} must be one-dimensional.")
+    return array
+
+
+def _load_count(value, *, expected_size: int) -> np.ndarray:
+    """Load and validate scalar/per-column observation counts."""
+    if isinstance(value, bool):
+        raise ValueError("normalizer count must be a non-negative integer.")
+    if isinstance(value, (int, np.integer)):
+        counts = np.full(expected_size, int(value), dtype=int)
+    else:
+        try:
+            counts = np.asarray(value, dtype=np.float64)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("normalizer count must be an integer or list.") from exc
+        if counts.ndim != 1 or counts.shape != (expected_size,):
+            raise ValueError("normalizer count list has an invalid shape.")
+        if not np.isfinite(counts).all() or not np.equal(counts, counts.astype(int)).all():
+            raise ValueError("normalizer count must contain integers.")
+        counts = counts.astype(int)
+    if (counts < 1).any():
+        raise ValueError("normalizer count must be positive.")
     return counts
 
 
