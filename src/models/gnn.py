@@ -385,7 +385,7 @@ class ScalarReadout(_ReadoutBase):
         return cls(input_dim, config.model.readout_hidden_dim)
 
     def forward(self, graph_embeddings):
-        """Return predictions with shape ``[num_graphs, 1]``."""
+        """Return predictions with shape ``[num_graphs]``."""
         if torch is None:  # pragma: no cover - constructor raises first
             raise ImportError(
                 "ScalarReadout requires PyTorch; install the model dependencies."
@@ -399,7 +399,10 @@ class ScalarReadout(_ReadoutBase):
             )
         if not graph_embeddings.is_floating_point():
             raise TypeError("graph_embeddings must use a floating-point dtype.")
-        return self.network(graph_embeddings)
+        # GraphBuilder/PyG batching stores targets as [B]. Squeezing only the
+        # final singleton output dimension keeps loss computation elementwise
+        # and prevents accidental [B, B] broadcasting against ``batch.y``.
+        return self.network(graph_embeddings).squeeze(-1)
 
 
 class MolecularGNN(_MolecularGNNBase):

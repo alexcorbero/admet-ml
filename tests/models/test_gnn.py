@@ -220,7 +220,7 @@ class ScalarReadoutTests(unittest.TestCase):
 
         self.assertEqual(readout.input_dim, 12)
         self.assertEqual(readout.hidden_dim, 4)
-        self.assertEqual(tuple(predictions.shape), (3, 1))
+        self.assertEqual(tuple(predictions.shape), (3,))
         self.assertTrue(torch.isfinite(predictions).all().item())
 
     def test_rejects_wrong_embedding_shape(self):
@@ -295,10 +295,13 @@ class MolecularGNNEncodeTests(unittest.TestCase):
         )
 
         predictions = model(data)
-        loss = (predictions - torch.tensor([[0.5], [-0.5]])).square().mean()
+        targets = torch.tensor([0.5, -0.5])
+        loss = (predictions - targets).square().mean()
         loss.backward()
 
-        self.assertEqual(tuple(predictions.shape), (2, 1))
+        self.assertEqual(tuple(predictions.shape), (2,))
+        self.assertEqual(tuple(targets.shape), (2,))
+        self.assertEqual(loss.ndim, 0)
         self.assertTrue(torch.isfinite(loss).item())
         gradients = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
         self.assertTrue(gradients)
@@ -328,7 +331,7 @@ class MolecularGNNEncodeTests(unittest.TestCase):
         named_parameters = dict(model.named_parameters())
 
         self.assertEqual(tuple(embedding.shape), (2, config.model.hidden_dim))
-        self.assertEqual(tuple(predictions.shape), (2, 1))
+        self.assertEqual(tuple(predictions.shape), (2,))
         self.assertEqual(model.message_passing.num_layers, 2)
         self.assertEqual(model.message_passing.edge_dim, edge_dim)
         self.assertEqual(model.node_encoder.hidden_dim, config.model.hidden_dim)
