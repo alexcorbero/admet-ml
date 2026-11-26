@@ -36,6 +36,39 @@ _BOND_TYPE_VALUES = tuple(getattr(Chem.BondType, name) for name in _BOND_TYPE_NA
 _BOND_TYPE_INDEX = {bond_type: index for index, bond_type in enumerate(_BOND_TYPE_VALUES)}
 _BOND_FLAG_OFFSET = 1 + len(_BOND_TYPE_NAMES)
 _BOND_FEATURE_WIDTH = _BOND_FLAG_OFFSET + 3
+_BOND_FEATURE_NAMES = (
+    "is_bonded",
+    *(f"bond_type_{name}" for name in _BOND_TYPE_NAMES),
+    "bond_is_aromatic",
+    "bond_is_conjugated",
+    "bond_is_in_ring",
+)
+
+
+def get_edge_feature_names(config: GraphConfig) -> tuple[str, ...]:
+    """Return the ordered column names for ``edge_attr``.
+
+    The schema mirrors the concatenation performed by
+    :func:`build_edge_features`: optional bond-chemistry columns come first,
+    followed by the optional 3D distance and Gaussian RBF columns. RBF names
+    are indexed in the same ascending-center order used by ``numpy.linspace``.
+    Differential-geometry kernels are deliberately excluded: they belong to
+    node density features rather than ``edge_attr``.
+    """
+    if not isinstance(config, GraphConfig):
+        raise TypeError("config must be a GraphConfig instance.")
+
+    names: list[str] = []
+    if config.include_bond_features:
+        names.extend(_BOND_FEATURE_NAMES)
+    if config.include_distance:
+        names.append("distance")
+    if config.include_rbf:
+        names.extend(
+            f"gaussian_rbf_center_{index}"
+            for index in range(config.rbf_num_centers)
+        )
+    return tuple(names)
 
 
 def build_covalent_edge_index(mol: Chem.Mol) -> np.ndarray:

@@ -1,4 +1,4 @@
-"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.7)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.8)."""
 
 from dataclasses import fields
 import inspect
@@ -13,6 +13,7 @@ from src.gnn.edge_features import (
     build_covalent_edge_index,
     build_edge_features,
     build_radius_edge_index,
+    get_edge_feature_names,
 )
 
 
@@ -688,6 +689,92 @@ class EdgeKernelSeparationTests(unittest.TestCase):
         self.assertNotIn("dg_kernel_configs", graph_config_fields)
         self.assertNotIn("dg_kernel", edge_builder_parameters)
         self.assertNotIn("dg_kernel_configs", edge_builder_parameters)
+
+
+class EdgeFeatureNameTests(unittest.TestCase):
+    def test_default_schema_matches_edge_attr_column_order(self):
+        names = get_edge_feature_names(GraphConfig(rbf_num_centers=3))
+
+        self.assertEqual(names[0], "is_bonded")
+        self.assertEqual(
+            names[1:22],
+            (
+                "bond_type_UNSPECIFIED",
+                "bond_type_SINGLE",
+                "bond_type_DOUBLE",
+                "bond_type_TRIPLE",
+                "bond_type_QUADRUPLE",
+                "bond_type_QUINTUPLE",
+                "bond_type_HEXTUPLE",
+                "bond_type_ONEANDAHALF",
+                "bond_type_TWOANDAHALF",
+                "bond_type_THREEANDAHALF",
+                "bond_type_FOURANDAHALF",
+                "bond_type_FIVEANDAHALF",
+                "bond_type_AROMATIC",
+                "bond_type_IONIC",
+                "bond_type_HYDROGEN",
+                "bond_type_THREECENTER",
+                "bond_type_DATIVEONE",
+                "bond_type_DATIVE",
+                "bond_type_DATIVEL",
+                "bond_type_DATIVER",
+                "bond_type_ZERO",
+            ),
+        )
+        self.assertEqual(
+            names[22:],
+            (
+                "bond_is_aromatic",
+                "bond_is_conjugated",
+                "bond_is_in_ring",
+                "distance",
+                "gaussian_rbf_center_0",
+                "gaussian_rbf_center_1",
+                "gaussian_rbf_center_2",
+            ),
+        )
+
+    def test_schema_honors_enabled_edge_feature_blocks(self):
+        self.assertEqual(
+            get_edge_feature_names(
+                GraphConfig(
+                    include_bond_features=False,
+                    include_distance=False,
+                    include_rbf=False,
+                )
+            ),
+            (),
+        )
+        self.assertEqual(
+            get_edge_feature_names(
+                GraphConfig(
+                    include_bond_features=False,
+                    include_distance=False,
+                    include_rbf=True,
+                    rbf_num_centers=2,
+                )
+            ),
+            ("gaussian_rbf_center_0", "gaussian_rbf_center_1"),
+        )
+
+    def test_schema_width_matches_built_edge_attributes(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+        config = GraphConfig(
+            edge_mode="covalent",
+            include_bond_features=False,
+            rbf_num_centers=3,
+        )
+        _, edge_attr = build_edge_features(molecule, conf_id=conf_id, config=config)
+
+        self.assertEqual(edge_attr.shape[1], len(get_edge_feature_names(config)))
+
+    def test_invalid_config_is_rejected(self):
+        with self.assertRaises(TypeError):
+            get_edge_feature_names(None)
 
 
 
