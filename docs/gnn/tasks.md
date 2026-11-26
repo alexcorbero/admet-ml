@@ -45,7 +45,7 @@
 - [x] **T4.2** Reutilizar derivadas analíticas de G6.
 - [x] **T4.3** Implementar densidad por átomo.
 - [x] **T4.4** Implementar densidad por carga opcional.
-- [ ] **T4.5** Implementar `H`, `K`, `kappa_min`, `kappa_max`.
+- [x] **T4.5** Implementar `H`, `K`, `kappa_min`, `kappa_max`.
 - [ ] **T4.6** Implementar máscaras de validez.
 - [ ] **T4.7** Implementar valor neutro para curvatura inválida.
 - [ ] **T4.8** Implementar transformación numérica configurable.

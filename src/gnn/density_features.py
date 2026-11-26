@@ -157,8 +157,8 @@ def _curvature_from_geometry(
 
     G6 evaluates one target element at a time. The target-wise results are
     placed back into the original atom order so each output column remains a
-    node feature. Validity masks and neutral replacement are intentionally
-    left to T4.6/T4.7.
+    node feature. Validity masks are propagated from G6; neutral replacement
+    is intentionally left to T4.7.
     """
     from src.features.dg_gl_features import (
         element_interactive_curvature_at_atoms,
@@ -178,6 +178,10 @@ def _curvature_from_geometry(
                 name: np.full(n_atoms, np.nan, dtype=float)
                 for name in _CURVATURE_VALUE_NAMES
             }
+            values_by_name["curvature_valid"] = np.zeros(
+                n_atoms,
+                dtype=float,
+            )
 
             for target_element in target_elements:
                 target_indices = np.flatnonzero(
@@ -197,8 +201,14 @@ def _curvature_from_geometry(
 
                 for name in _CURVATURE_VALUE_NAMES:
                     values_by_name[name][target_indices] = curvature[name]
+                values_by_name["curvature_valid"][target_indices] = (
+                    np.asarray(curvature["valid"], dtype=float)
+                )
 
-            columns.extend(values_by_name[name] for name in _CURVATURE_VALUE_NAMES)
+            columns.extend(
+                values_by_name[name]
+                for name in _CURVATURE_FEATURE_NAMES
+            )
 
     if not columns:
         return np.empty((n_atoms, 0), dtype=float)
@@ -216,8 +226,8 @@ def build_density_features(
     Coordinates and van der Waals radii follow the existing G6 helpers, and
     density values use the shared analytical G6 derivative implementation.
     Number and optional charge density are supported here. When enabled,
-    curvature values are emitted per local source channel; validity masks and
-    neutral replacement remain reserved for later tasks.
+    curvature values and their validity masks are emitted per local source
+    channel; neutral replacement remains reserved for T4.7.
     """
     if not isinstance(config, AtomicFeaturesConfig):
         raise TypeError("config must be an AtomicFeaturesConfig instance.")
@@ -276,8 +286,8 @@ def build_density_features(
             )
             for channel_index in range(n_channels):
                 density_columns.append(density_matrix[:, channel_index])
-                curvature_start = channel_index * len(_CURVATURE_VALUE_NAMES)
-                curvature_end = curvature_start + len(_CURVATURE_VALUE_NAMES)
+                curvature_start = channel_index * len(_CURVATURE_FEATURE_NAMES)
+                curvature_end = curvature_start + len(_CURVATURE_FEATURE_NAMES)
                 density_columns.extend(
                     curvature_matrix[:, curvature_start:curvature_end].T
                 )
