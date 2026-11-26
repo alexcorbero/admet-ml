@@ -1,11 +1,10 @@
-"""Feature-schema composition for molecular graph inputs in G7."""
+"""Feature-schema composition and PyG graph assembly for G7."""
 
 from __future__ import annotations
 
-from .atom_features import get_atom_feature_names
+import numpy as np
+
 from .config import GNNConfig
-from .density_features import get_density_feature_names
-from .edge_features import get_edge_feature_names
 
 
 def get_node_feature_names(config: GNNConfig) -> tuple[str, ...]:
@@ -18,6 +17,9 @@ def get_node_feature_names(config: GNNConfig) -> tuple[str, ...]:
     """
     if not isinstance(config, GNNConfig):
         raise TypeError("config must be a GNNConfig instance.")
+
+    from .atom_features import get_atom_feature_names
+    from .density_features import get_density_feature_names
 
     return (
         *get_atom_feature_names(config.atomic_features),
@@ -37,11 +39,62 @@ def get_graph_feature_names(
     if not isinstance(config, GNNConfig):
         raise TypeError("config must be a GNNConfig instance.")
 
+    from .atom_features import get_atom_feature_names
     x_chem_names = get_atom_feature_names(config.atomic_features)
+    from .density_features import get_density_feature_names
     x_dg_names = get_density_feature_names(config.atomic_features)
+    from .edge_features import get_edge_feature_names
+
     return {
         "x": (*x_chem_names, *x_dg_names),
         "x_chem": x_chem_names,
         "x_dg": x_dg_names,
         "edge_attr": get_edge_feature_names(config.graph),
     }
+
+
+def build_graph(
+    mol,
+    conf_id: int,
+    config: GNNConfig,
+):
+    """Build the raw PyTorch Geometric graph tensors for one molecule.
+
+    This task composes the already-scoped atom, density, and edge builders.
+    Targets and graph metadata are intentionally added by a later task.
+    """
+    if not isinstance(config, GNNConfig):
+        raise TypeError("config must be a GNNConfig instance.")
+
+    import torch
+    from torch_geometric.data import Data
+
+    from .atom_features import build_atom_features
+    from .density_features import build_density_features
+    from .edge_features import build_edge_features
+    from src.features.descriptors_3d import get_coordinates
+
+    z, x_chem = build_atom_features(mol, config.atomic_features)
+    x_dg = build_density_features(mol, conf_id, config.atomic_features)
+    edge_index, edge_attr = build_edge_features(mol, conf_id, config.graph)
+    pos = np.asarray(get_coordinates(mol, conf_id), dtype=np.float32)
+
+    x = np.concatenate((x_chem, x_dg), axis=1).astype(
+        np.float32,
+        copy=False,
+    )
+
+    return Data(
+        z=torch.from_numpy(np.ascontiguousarray(z)).long(),
+        x=torch.from_numpy(np.ascontiguousarray(x)).float(),
+        x_chem=torch.from_numpy(np.ascontiguousarray(x_chem)).float(),
+        x_dg=torch.from_numpy(np.ascontiguousarray(x_dg)).float(),
+        pos=torch.from_numpy(np.ascontiguousarray(pos)).float(),
+        edge_index=torch.from_numpy(
+            np.ascontiguousarray(edge_index)
+        ).long(),
+        edge_attr=torch.from_numpy(
+            np.ascontiguousarray(edge_attr)
+        ).float(),
+        num_nodes=int(mol.GetNumAtoms()),
+    )

@@ -54,7 +54,7 @@
 
 ## Fase 5. Grafo (`src/gnn/graph_builder.py`)
 
-- [ ] **T5.1** Implementar nombres de features de grafo.
+- [x] **T5.1** Implementar nombres de features de grafo.
 - [ ] **T5.2** Implementar `build_graph()`.
 - [ ] **T5.3** Añadir target y metadata.
 - [ ] **T5.4** Validar shapes, dtypes y finitud.
