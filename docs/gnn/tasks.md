@@ -96,6 +96,7 @@
 
 ## Fase 9. `07_gnn_graph_generation.ipynb`
 
+- [ ] **T9.0** Generar y persistir conformers 3D de AqSolDB.
 - [ ] **T9.1** Cargar datos/conformeros y configuración.
 - [ ] **T9.2** Mostrar un grafo de ejemplo.
 - [ ] **T9.3** Mostrar esquema de features.

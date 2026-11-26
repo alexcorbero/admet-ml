@@ -28,6 +28,7 @@ admet-ml/
 │       └── gnn.py
 │
 ├── notebooks/
+│   ├── prepare_aqsoldb_conformers.ipynb
 │   ├── 07_gnn_graph_generation.ipynb
 │   ├── 08_gnn_training.ipynb
 │   └── 09_gnn_evaluation.ipynb
@@ -46,41 +47,65 @@ admet-ml/
 ## 2. Flujo
 
 ```text
-RDKit mol + conformer
-        │
-        ├─ atom_features.py ─────► z, x_chem
-        ├─ density_features.py ──► x_dg
-        ├─ edge_features.py ─────► edge_index, edge_attr
-        └─ conformer ────────────► pos
-                                   │
-                                   ▼
-                           graph_builder.py
-                                   │
-                                   ▼
-                              PyG Data
-                                   │
-                                   ▼
-                    07_gnn_graph_generation
-                         validate + cache
-                                   │
-                                   ▼
-                           raw graph cache
-                                   │
-                                   ▼
-                        08_gnn_training
-                  split + normalize + train
-                                   │
-                                   ▼
-                       checkpoint + history
-                                   │
-                                   ▼
-                       09_gnn_evaluation
-                    train/validation metrics
-                           │            │
-                           │            └── classical results
+                  AqSolDB
+                     │
+                     ▼
+        prepare_aqsoldb_conformers
+                     │
+                     ▼
+             RDKit MolFromSmiles
+                     │
+                     ▼
+             Chem.AddHs()
+                     │
+                     ▼
+             Generate conformers
+                     │
+                     ▼
+             Optimize conformers
+                     │
+                     ▼
+          Select lowest valid energy
+                     │
+                     ▼
+            Validate 3D geometry
+                     │
+              ┌──────┴──────┐
+              ▼             ▼
+         Valid mols      Excluded mols
+              │             │
+              ▼             ▼
+       conformers.pkl   excluded.csv
+              │
+              ▼
+       07_gnn_graph_generation
+              │
+              ├─ atom_features.py ─────► z, x_chem
+              ├─ density_features.py ──► x_dg
+              ├─ edge_features.py ─────► edge_index, edge_attr
+              └─ conformer ────────────► pos
+                           │
                            ▼
-                    common comparison
-```
+                     graph_builder.py
+                           │
+                           ▼
+                        PyG Data
+                           │
+                           ▼
+                    raw graph cache
+                           │
+                           ▼
+                    08_gnn_training
+                           │
+                           ▼
+                  checkpoint + history
+                           │
+                           ▼
+                   09_gnn_evaluation
+                           │
+                           ▼
+                   common comparison
+                   ```
 
 ## 3. Dependencias
 
@@ -284,6 +309,49 @@ El modelo consume:
 
 ## 5. Notebooks
 
+### `prepare_aqsoldb_conformers.ipynb`
+
+Responsable de preparar y persistir los conformers 3D de AqSolDB.
+
+Debe:
+
+1. Cargar las particiones oficiales de AqSolDB (`train_val` y `test`).
+2. Conservar los identificadores, SMILES, targets y splits originales.
+3. Generar moléculas RDKit a partir de los SMILES.
+4. Añadir hidrógenos explícitos.
+5. Generar varios conformers por molécula mediante ETKDG.
+6. Optimizar los conformers utilizando un campo de fuerza definido.
+7. Seleccionar el conformer optimizado de menor energía válida y finita.
+8. Validar las coordenadas y la geometría 3D.
+9. Registrar explícitamente las moléculas excluidas y sus causas.
+10. Persistir los conformers seleccionados y sus metadatos.
+
+Debe reutilizar las funciones existentes en `src/features/conformers.py`.
+
+Salida principal:
+
+- `data/conformers/aqsoldb/conformers.pkl`
+- `data/conformers/aqsoldb/manifest.json`
+- `data/conformers/aqsoldb/excluded.csv`
+
+Cada registro válido debe contener:
+
+- `mol_id`
+- `smiles`
+- `y`
+- `split`
+- `seed`
+- `mol`
+- `conf_id`
+
+El campo `seed` representa la semilla utilizada para generar los conformers, no la semilla de entrenamiento.
+
+El campo `conf_id` debe contener el identificador real del conformer seleccionado en RDKit.
+
+El notebook no construye grafos, no normaliza features y no entrena modelos.
+
+La generación de conformers es una etapa independiente y previa a la generación de grafos.
+
 ### `07_gnn_graph_generation.ipynb`
 
 Debe:
@@ -337,6 +405,11 @@ Salida principal: **tabla comparativa de modelos**.
 La estructura de persistencia será:
 
 ```text
+data/conformers/aqsoldb/
+├── conformers.pkl
+├── manifest.json
+└── excluded.csv
+
 data/graphs/aqsoldb/<graph_config_id>/
 ├── graphs.pt
 └── manifest.*
@@ -360,6 +433,9 @@ data/results/comparison/
 
 Responsabilidades:
 
+- `conformers.pkl` contiene los registros válidos de AqSolDB con sus moléculas RDKit y conformers seleccionados.
+- `manifest.json` registra los parámetros utilizados para generar los conformers, la semilla, el campo de fuerza, el número de moléculas procesadas, válidas y excluidas, y la información necesaria para reproducir la generación.
+- `excluded.csv` registra las moléculas excluidas y el motivo correspondiente.
 - `graph_config_id` identifica de forma reproducible la configuración utilizada para construir los grafos crudos;
 - `experiment_id` identifica una configuración experimental GNN;
 - `<seed>` identifica una ejecución concreta de entrenamiento dentro del experimento;

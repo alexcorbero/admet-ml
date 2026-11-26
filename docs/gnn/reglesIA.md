@@ -93,6 +93,44 @@ Verificar:
 - curvaturas inválidas con máscara;
 - ningún NaN/Inf llega al modelo.
 
+### Preparación y persistencia de conformers
+
+El notebook `prepare_aqsoldb_conformers.ipynb` es el único responsable de generar y persistir los conformers iniciales de AqSolDB.
+
+El agente debe:
+
+- utilizar las particiones oficiales de AqSolDB sin modificar sus filas;
+- conservar `mol_id`, `smiles`, `y` y `split`;
+- generar conformers de forma reproducible;
+- utilizar una semilla explícita y registrar la semilla efectiva utilizada;
+- reutilizar `src/features/conformers.py`;
+- mantener una única política de hidrógenos;
+- conservar los hidrógenos explícitos;
+- generar varios conformers y seleccionar uno por molécula;
+- seleccionar el conformer optimizado de menor energía válida y finita;
+- conservar el `conf_id` real devuelto por RDKit;
+- validar coordenadas finitas y geometrías no degeneradas;
+- registrar todas las moléculas excluidas y sus motivos.
+
+Restricciones:
+
+- no eliminar hidrógenos después de generar los conformers;
+- no añadir, eliminar ni reordenar átomos después de fijar la geometría;
+- no seleccionar conformers utilizando el target experimental;
+- no cambiar los splits oficiales;
+- no seleccionar un conformer utilizando únicamente su posición en una lista;
+- no mezclar energías calculadas con diferentes campos de fuerza;
+- no excluir moléculas silenciosamente;
+- no sustituir geometrías inválidas por geometrías artificiales.
+
+Si una molécula no puede generar un conformer válido, debe quedar registrada como excluida.
+
+Si no se dispone de parámetros para el campo de fuerza seleccionado, debe registrarse el fallo. No se debe cambiar silenciosamente a otro campo de fuerza.
+
+El artefacto persistido debe contener una única representación seleccionada por molécula.
+
+Todas las operaciones posteriores de G7 deben utilizar el mismo `conf_id` almacenado.
+
 ## 6. Modelo
 
 La GNN debe realizar message passing real.
@@ -118,18 +156,59 @@ El encoder debe:
 
 Cualquier cambio de GINE requiere actualizar antes la arquitectura.
 
-## 7. Notebook 07 — grafos
+## 7. Notebook de preparación de conformers
+
+`prepare_aqsoldb_conformers.ipynb`:
+
+- carga las particiones oficiales de AqSolDB;
+- genera conformers 3D;
+- optimiza las geometrías;
+- selecciona el conformer válido de menor energía;
+- valida la geometría;
+- registra moléculas excluidas;
+- guarda el artefacto de conformers y su manifest.
+
+No:
+
+- construye grafos;
+- calcula features GNN;
+- normaliza datos;
+- entrena modelos;
+- modifica los targets;
+- modifica los splits.
+
+La generación debe ser reproducible a partir de los parámetros y semillas registrados.
+
+El artefacto se guarda en:
+
+`data/conformers/aqsoldb/conformers.pkl`
+
+Los artefactos generados dentro de `data/` no deben incorporarse al repositorio Git.
+
+## 8. Notebook 07 — grafos
 
 `07_gnn_graph_generation.ipynb`:
 
+- carga los datos oficiales de AqSolDB;
+- carga el artefacto persistido de conformers;
+- valida la correspondencia entre moléculas y conformers;
 - construye grafos;
-- valida shapes/esquemas;
+- valida shapes y esquemas;
 - registra fallos;
 - guarda grafos crudos.
 
-No normaliza, no entrena y no calcula comparaciones finales.
+No:
 
-## 8. Notebook 08 — entrenamiento
+- genera conformers;
+- modifica geometrías;
+- cambia la política de hidrógenos;
+- normaliza;
+- entrena;
+- calcula comparaciones finales.
+
+Si el artefacto de conformers no existe o es incompatible, debe detenerse explícitamente.
+
+## 9. Notebook 08 — entrenamiento
 
 `08_gnn_training.ipynb` debe:
 
@@ -147,7 +226,7 @@ No normaliza, no entrena y no calcula comparaciones finales.
 
 Huber puede ser la loss inicial; MAE sigue siendo la métrica primaria.
 
-## 9. Notebook 09 — evaluación
+## 10. Notebook 09 — evaluación
 
 `09_gnn_evaluation.ipynb`:
 
@@ -171,7 +250,7 @@ Toda tabla comparativa debe incluir como mínimo:
 - RMSE;
 - R².
 
-## 10. Comparación GNN vs ML clásico
+## 11. Comparación GNN vs ML clásico
 
 Para comparar con XGBoost:
 
@@ -185,7 +264,7 @@ Para comparar con XGBoost:
 
 No se debe concluir superioridad a partir de splits distintos o poblaciones distintas.
 
-## 11. Pruebas mínimas
+## 12. Pruebas mínimas
 
 ### Configuración
 - defaults válidos;
@@ -241,7 +320,7 @@ No se debe concluir superioridad a partir de splits distintos o poblaciones dist
 - checkpoint roundtrip;
 - notebooks en kernel limpio.
 
-## 12. Git
+## 13. Git
 
 - una tarea por cambio pequeño y revisable;
 - commits con ID de tarea;
@@ -249,7 +328,7 @@ No se debe concluir superioridad a partir de splits distintos o poblaciones dist
 - no mezclar tareas sin necesidad;
 - mantener 07 = grafos, 08 = training, 09 = evaluación.
 
-## 13. Cambios de diseño
+## 14. Cambios de diseño
 
 Si aparece una decisión no contemplada:
 
@@ -259,7 +338,7 @@ Si aparece una decisión no contemplada:
 
 La implementación no debe convertirse en la fuente de requisitos.
 
-## 14. Tarea terminada
+## 15. Tarea terminada
 
 Una tarea solo se considera terminada si:
 

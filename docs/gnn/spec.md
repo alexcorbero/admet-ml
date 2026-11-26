@@ -418,6 +418,20 @@ history.csv contiene:
 - validation_loss
 - validation_mae
 
+data/conformers/aqsoldb/conformers.pkl
+
+Esquema obligatorio por registro:
+- mol_id
+- smiles
+- y
+- split
+- seed
+- mol
+- conf_id
+Registro de exclusiones:
+
+Un archivo independiente con el identificador de la molécula y el motivo de exclusión.
+
 ## 12. Criterios de aceptación
 
 G7 se considera funcionalmente implementado cuando:
