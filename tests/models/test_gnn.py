@@ -9,7 +9,16 @@ except ModuleNotFoundError:  # pragma: no cover - environment dependent
 
 from src.gnn.config import GNNConfig, ModelConfig
 from src.gnn.graph_builder import get_node_feature_names
-from src.models.gnn import AtomicNumberEmbedding, NodeFeatureEncoder
+from src.models.gnn import (
+    AtomicNumberEmbedding,
+    GINEMessagePassing,
+    NodeFeatureEncoder,
+)
+
+try:
+    import torch_geometric
+except ModuleNotFoundError:
+    torch_geometric = None
 
 
 @unittest.skipUnless(torch is not None, "PyTorch is not installed")
@@ -62,6 +71,35 @@ class NodeFeatureEncoderTests(unittest.TestCase):
             encoder(
                 torch.tensor([6], dtype=torch.long),
                 torch.zeros((1, 1), dtype=torch.float32),
+            )
+
+
+@unittest.skipUnless(
+    torch is not None and torch_geometric is not None,
+    "PyTorch and PyTorch Geometric are not installed",
+)
+class GINEMessagePassingTests(unittest.TestCase):
+    def test_uses_edge_index_and_edge_attr_to_return_node_states(self):
+        config = GNNConfig()
+        # Default GraphConfig: distance plus 32 Gaussian RBF features.
+        edge_dim = 33
+        layer = GINEMessagePassing(config.model.hidden_dim, edge_dim)
+        x = torch.randn((3, config.model.hidden_dim), dtype=torch.float32)
+        edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
+        edge_attr = torch.randn((4, edge_dim), dtype=torch.float32)
+
+        result = layer(x, edge_index, edge_attr)
+
+        self.assertEqual(tuple(result.shape), (3, config.model.hidden_dim))
+        self.assertTrue(torch.isfinite(result).all().item())
+
+    def test_rejects_edge_attribute_shape_mismatch(self):
+        layer = GINEMessagePassing(hidden_dim=8, edge_dim=3)
+        with self.assertRaisesRegex(ValueError, "3 columns"):
+            layer(
+                torch.zeros((2, 8)),
+                torch.tensor([[0], [1]], dtype=torch.long),
+                torch.zeros((1, 2)),
             )
 
 

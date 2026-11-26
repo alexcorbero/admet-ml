@@ -84,7 +84,7 @@
 ## Fase 8. Modelo (`src/models/gnn.py`)
 
 - [x] **T8.1** Implementar embedding atómico.
-- [ ] **T8.2** Implementar encoder de nodos.
+- [x] **T8.2** Implementar encoder de nodos.
 - [ ] **T8.3** Implementar message passing GINE.
 - [ ] **T8.4** Apilar capas con norm/activación/dropout.
 - [ ] **T8.5** Implementar residuals.

@@ -21,6 +21,7 @@ _MAX_ATOMIC_NUMBER = 118
 _NUM_ATOMIC_EMBEDDINGS = _MAX_ATOMIC_NUMBER + 1
 _EmbeddingBase = nn.Module if nn is not None else object
 _NodeEncoderBase = nn.Module if nn is not None else object
+_MessagePassingBase = nn.Module if nn is not None else object
 
 
 class AtomicNumberEmbedding(_EmbeddingBase):
@@ -136,4 +137,71 @@ class NodeFeatureEncoder(_NodeEncoderBase):
 
 # Short alias for callers that use the architectural term directly.
 NodeEncoder = NodeFeatureEncoder
+
+
+class GINEMessagePassing(_MessagePassingBase):
+    """One edge-aware GINE message-passing layer.
+
+    The layer deliberately represents a single convolution only. Layer
+    stacking, normalization, dropout, and residual connections are assigned
+    to T8.4 and T8.5.
+    """
+
+    def __init__(self, hidden_dim: int, edge_dim: int) -> None:
+        if nn is None:
+            raise ImportError(
+                "GINEMessagePassing requires PyTorch; install the model dependencies."
+            )
+        if isinstance(hidden_dim, bool) or not isinstance(hidden_dim, int) or hidden_dim <= 0:
+            raise ValueError("hidden_dim must be a positive integer.")
+        if isinstance(edge_dim, bool) or not isinstance(edge_dim, int) or edge_dim <= 0:
+            raise ValueError("edge_dim must be a positive integer.")
+        try:
+            from torch_geometric.nn import GINEConv
+        except ModuleNotFoundError as exc:
+            raise ImportError(
+                "GINEMessagePassing requires torch-geometric; install the model dependencies."
+            ) from exc
+        super().__init__()
+        self.hidden_dim = hidden_dim
+        self.edge_dim = edge_dim
+        self.convolution = GINEConv(
+            nn=nn.Linear(hidden_dim, hidden_dim),
+            edge_dim=edge_dim,
+        )
+
+    def forward(self, x, edge_index, edge_attr):
+        """Propagate node states using the supplied connectivity and edges."""
+        if torch is None:  # pragma: no cover - constructor raises first
+            raise ImportError(
+                "GINEMessagePassing requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(x, torch.Tensor):
+            raise TypeError("x must be a torch.Tensor.")
+        if not isinstance(edge_index, torch.Tensor) or not isinstance(edge_attr, torch.Tensor):
+            raise TypeError("edge_index and edge_attr must be torch.Tensor instances.")
+        if x.ndim != 2 or x.shape[1] != self.hidden_dim:
+            raise ValueError(
+                f"x must have shape [N, {self.hidden_dim}]; got {tuple(x.shape)}."
+            )
+        if edge_index.ndim != 2 or tuple(edge_index.shape[:1]) != (2,):
+            raise ValueError(
+                f"edge_index must have shape [2, E]; got {tuple(edge_index.shape)}."
+            )
+        if edge_index.dtype != torch.long:
+            raise TypeError("edge_index must use torch.long.")
+        if edge_attr.ndim != 2 or edge_attr.shape[0] != edge_index.shape[1]:
+            raise ValueError("edge_attr must have one row per edge.")
+        if edge_attr.shape[1] != self.edge_dim:
+            raise ValueError(
+                f"edge_attr must have {self.edge_dim} columns; "
+                f"got {edge_attr.shape[1]}."
+            )
+        if not x.is_floating_point() or not edge_attr.is_floating_point():
+            raise TypeError("x and edge_attr must use floating-point dtypes.")
+        return self.convolution(x, edge_index, edge_attr)
+
+
+# Descriptive alias for callers that use the convolution terminology.
+GINEConvLayer = GINEMessagePassing
 
