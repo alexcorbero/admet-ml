@@ -57,11 +57,16 @@ def build_graph(
     mol,
     conf_id: int,
     config: GNNConfig,
+    y: float | None = None,
+    smiles: str | None = None,
+    mol_id: str | int | None = None,
 ):
     """Build the raw PyTorch Geometric graph tensors for one molecule.
 
     This task composes the already-scoped atom, density, and edge builders.
-    Targets and graph metadata are intentionally added by a later task.
+    ``y`` and the optional identifiers are attached without changing any
+    node or edge feature tensor. The selected conformer ID is always stored
+    so the graph representation remains reproducible.
     """
     if not isinstance(config, GNNConfig):
         raise TypeError("config must be a GNNConfig instance.")
@@ -84,7 +89,7 @@ def build_graph(
         copy=False,
     )
 
-    return Data(
+    data = Data(
         z=torch.from_numpy(np.ascontiguousarray(z)).long(),
         x=torch.from_numpy(np.ascontiguousarray(x)).float(),
         x_chem=torch.from_numpy(np.ascontiguousarray(x_chem)).float(),
@@ -98,3 +103,13 @@ def build_graph(
         ).float(),
         num_nodes=int(mol.GetNumAtoms()),
     )
+
+    if y is not None:
+        data.y = torch.tensor([y], dtype=torch.float32)
+    if smiles is not None:
+        data.smiles = smiles
+    if mol_id is not None:
+        data.mol_id = str(mol_id)
+    data.conf_id = torch.tensor([int(conf_id)], dtype=torch.long)
+
+    return data
