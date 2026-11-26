@@ -1,8 +1,8 @@
 """Dataset-level graph generation for G7.
 
-This module only turns already prepared molecule records into raw PyG graphs.
-Failure accounting, persistence, cache validation, and subset selection are
-deliberately left to their later dataset tasks.
+This module turns already prepared molecule records into raw PyG graphs and
+persists/loads those raw graphs. Failure accounting, cache validation, and
+subset selection remain separate responsibilities.
 """
 
 from __future__ import annotations
@@ -43,6 +43,14 @@ class GraphBuildReport:
     graphs: list[Any]
     successes: list[GraphBuildSuccess]
     failures: list[GraphBuildFailure]
+
+
+@dataclass(frozen=True)
+class GraphDatasetArtifact:
+    """Persisted raw graphs together with caller-provided metadata."""
+
+    graphs: list[Any]
+    metadata: dict[str, Any]
 
 
 def build_graph_dataset(
@@ -199,4 +207,64 @@ def build_graph_dataset_with_report(
         graphs=graphs,
         successes=successes,
         failures=failures,
+    )
+
+
+def save_graph_dataset(
+    graphs: Iterable[Any],
+    path: str,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> Any:
+    """Persist raw graphs and optional metadata to a torch archive.
+
+    The graphs are saved without normalization. Cache compatibility checks,
+    including configuration-ID validation, belong to T6.5.
+    """
+    if metadata is not None and not isinstance(metadata, Mapping):
+        raise TypeError("metadata must be a mapping or None.")
+
+    from pathlib import Path
+
+    import torch
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "graphs": list(graphs),
+        "metadata": dict(metadata) if metadata is not None else {},
+    }
+    torch.save(payload, target)
+    return target
+
+
+def load_graph_dataset(path: str) -> GraphDatasetArtifact:
+    """Load a raw graph archive saved by :func:`save_graph_dataset`.
+
+    This validates only the persistence envelope. It deliberately does not
+    decide whether a cache is compatible with the current configuration.
+    """
+    from pathlib import Path
+
+    import torch
+
+    source = Path(path)
+    try:
+        payload = torch.load(source, map_location="cpu", weights_only=False)
+    except TypeError:
+        # Compatibility with torch versions that do not expose weights_only.
+        payload = torch.load(source, map_location="cpu")
+
+    if not isinstance(payload, Mapping):
+        raise ValueError("graph archive must contain a mapping payload.")
+    graphs = payload.get("graphs")
+    metadata = payload.get("metadata")
+    if not isinstance(graphs, list):
+        raise ValueError("graph archive field 'graphs' must be a list.")
+    if not isinstance(metadata, Mapping):
+        raise ValueError("graph archive field 'metadata' must be a mapping.")
+
+    return GraphDatasetArtifact(
+        graphs=graphs,
+        metadata=dict(metadata),
     )

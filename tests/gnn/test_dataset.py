@@ -1,10 +1,19 @@
 """Tests for dataset-level raw graph generation (T6.2)."""
 
 import unittest
+import pickle
+import tempfile
+import types
 from unittest.mock import Mock, patch
+from pathlib import Path
 
 from src.gnn.config import GNNConfig
-from src.gnn.dataset import build_graph_dataset, build_graph_dataset_with_report
+from src.gnn.dataset import (
+    build_graph_dataset,
+    build_graph_dataset_with_report,
+    load_graph_dataset,
+    save_graph_dataset,
+)
 
 
 class GraphDatasetTests(unittest.TestCase):
@@ -173,6 +182,47 @@ class GraphDatasetTests(unittest.TestCase):
         self.assertEqual(report.failures[0].record_index, 0)
         self.assertEqual(report.failures[0].error_type, "TypeError")
         self.assertIn("mapping", report.failures[0].error_message)
+
+    def test_save_and_load_preserves_raw_graphs_and_metadata(self):
+        saved_payloads = {}
+
+        def fake_save(payload, path):
+            saved_payloads[Path(path)] = payload
+            Path(path).write_bytes(pickle.dumps(payload))
+
+        def fake_load(path, **_kwargs):
+            return pickle.loads(Path(path).read_bytes())
+
+        fake_torch = types.SimpleNamespace(save=fake_save, load=fake_load)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = Path(temporary_directory) / "nested" / "graphs.pt"
+            with patch.dict("sys.modules", {"torch": fake_torch}):
+                saved_path = save_graph_dataset(
+                    ["graph-a", "graph-b"],
+                    str(archive),
+                    metadata={"graph_config_id": "abc", "n": 2},
+                )
+                artifact = load_graph_dataset(str(archive))
+
+        self.assertEqual(saved_path, archive)
+        self.assertEqual(artifact.graphs, ["graph-a", "graph-b"])
+        self.assertEqual(
+            artifact.metadata,
+            {"graph_config_id": "abc", "n": 2},
+        )
+        self.assertEqual(saved_payloads[archive]["graphs"], ["graph-a", "graph-b"])
+
+    def test_persistence_rejects_invalid_envelope_and_metadata(self):
+        fake_torch = types.SimpleNamespace(
+            save=lambda payload, path: None,
+            load=lambda path, **_kwargs: {"graphs": "not-a-list", "metadata": {}},
+        )
+        with patch.dict("sys.modules", {"torch": fake_torch}):
+            with self.assertRaisesRegex(ValueError, "graphs.*list"):
+                load_graph_dataset("graphs.pt")
+
+        with self.assertRaises(TypeError):
+            save_graph_dataset([], "graphs.pt", metadata=["invalid"])
 
 
 if __name__ == "__main__":
