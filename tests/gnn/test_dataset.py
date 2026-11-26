@@ -13,6 +13,7 @@ from src.gnn.dataset import (
     build_graph_dataset_with_report,
     load_graph_dataset,
     save_graph_dataset,
+    select_graph_subset,
     validate_graph_dataset_compatibility,
     GraphDatasetArtifact,
 )
@@ -260,6 +261,37 @@ class GraphDatasetTests(unittest.TestCase):
         with patch.dict("sys.modules", {"torch": fake_torch}):
             artifact = load_graph_dataset("graphs.pt", config=config)
         self.assertEqual(artifact.graphs, ["graph"])
+
+    def test_select_graph_subset_preserves_cache_order(self):
+        graphs = [
+            types.SimpleNamespace(mol_id="b"),
+            types.SimpleNamespace(mol_id="a"),
+            types.SimpleNamespace(mol_id="c"),
+        ]
+
+        selected = select_graph_subset(graphs, ["c", "b"])
+
+        self.assertEqual([graph.mol_id for graph in selected], ["b", "c"])
+
+    def test_select_graph_subset_rejects_missing_and_duplicate_ids(self):
+        graphs = [types.SimpleNamespace(mol_id="a"), types.SimpleNamespace(mol_id="b")]
+
+        with self.assertRaisesRegex(ValueError, "missing"):
+            select_graph_subset(graphs, ["a", "missing"])
+        with self.assertRaisesRegex(ValueError, "duplicate IDs"):
+            select_graph_subset(graphs, ["a", "a"])
+
+    def test_select_graph_subset_rejects_duplicate_or_missing_graph_ids(self):
+        with self.assertRaisesRegex(ValueError, "duplicate graph ID"):
+            select_graph_subset(
+                [
+                    types.SimpleNamespace(mol_id="a"),
+                    types.SimpleNamespace(mol_id="a"),
+                ],
+                ["a"],
+            )
+        with self.assertRaisesRegex(ValueError, "missing required ID"):
+            select_graph_subset([object()], ["a"])
 
 
 if __name__ == "__main__":

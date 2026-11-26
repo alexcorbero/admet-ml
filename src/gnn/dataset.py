@@ -1,8 +1,8 @@
 """Dataset-level graph generation for G7.
 
 This module turns already prepared molecule records into raw PyG graphs,
-persists/loads those raw graphs, and validates cache compatibility. Subset
-selection remains a separate responsibility.
+persists/loads those raw graphs, validates cache compatibility, and selects
+subsets by stable molecule IDs.
 """
 
 from __future__ import annotations
@@ -51,6 +51,52 @@ class GraphDatasetArtifact:
 
     graphs: list[Any]
     metadata: dict[str, Any]
+
+
+def select_graph_subset(
+    graphs: Iterable[Any],
+    split_ids: Iterable[Any],
+    *,
+    id_attribute: str = "mol_id",
+) -> list[Any]:
+    """Select cached graphs whose stable IDs belong to a split.
+
+    Selection preserves the order of ``graphs`` so that filtering a raw cache
+    cannot silently reorder the dataset. Every requested split ID must occur
+    exactly once in the cache; missing IDs and duplicate IDs are rejected
+    explicitly. The default ``mol_id`` attribute is the stable graph ID
+    attached by :func:`src.gnn.graph_builder.build_graph`.
+    """
+    if not isinstance(id_attribute, str) or not id_attribute:
+        raise ValueError("id_attribute must be a non-empty string.")
+
+    cached_graphs = list(graphs)
+    requested_ids = list(split_ids)
+    if len(set(requested_ids)) != len(requested_ids):
+        raise ValueError("split_ids must not contain duplicate IDs.")
+
+    graph_by_id: dict[Any, Any] = {}
+    for graph_index, graph in enumerate(cached_graphs):
+        graph_id = getattr(graph, id_attribute, None)
+        if graph_id is None:
+            raise ValueError(
+                f"graph {graph_index} is missing required ID attribute "
+                f"'{id_attribute}'."
+            )
+        if graph_id in graph_by_id:
+            raise ValueError(f"duplicate graph ID in cache: {graph_id!r}.")
+        graph_by_id[graph_id] = graph
+
+    missing_ids = [split_id for split_id in requested_ids if split_id not in graph_by_id]
+    if missing_ids:
+        raise ValueError(f"split IDs are missing from cache: {missing_ids!r}.")
+
+    requested_id_set = set(requested_ids)
+    return [
+        graph
+        for graph in cached_graphs
+        if getattr(graph, id_attribute) in requested_id_set
+    ]
 
 
 def build_graph_dataset(
