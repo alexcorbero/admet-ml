@@ -304,6 +304,43 @@ class MolecularGNNEncodeTests(unittest.TestCase):
         self.assertTrue(gradients)
         self.assertTrue(all(torch.isfinite(gradient).all().item() for gradient in gradients))
 
+    def test_shapes_and_trainable_parameter_registry(self):
+        config = GNNConfig(
+            model=ModelConfig(
+                hidden_dim=8,
+                num_message_passing_layers=2,
+                dropout=0.0,
+                residual_connections=True,
+            )
+        )
+        edge_dim = len(get_edge_feature_names(config.graph))
+        model = MolecularGNN(config, edge_dim=edge_dim)
+        data = SimpleNamespace(
+            z=torch.tensor([6, 8, 17], dtype=torch.long),
+            x=torch.randn((3, 5), dtype=torch.float32),
+            edge_index=torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long),
+            edge_attr=torch.randn((4, edge_dim), dtype=torch.float32),
+            batch=torch.tensor([0, 0, 1], dtype=torch.long),
+        )
+
+        embedding = model.encode(data)
+        predictions = model(data)
+        named_parameters = dict(model.named_parameters())
+
+        self.assertEqual(tuple(embedding.shape), (2, config.model.hidden_dim))
+        self.assertEqual(tuple(predictions.shape), (2, 1))
+        self.assertEqual(model.message_passing.num_layers, 2)
+        self.assertEqual(model.message_passing.edge_dim, edge_dim)
+        self.assertEqual(model.node_encoder.hidden_dim, config.model.hidden_dim)
+        self.assertEqual(model.readout.hidden_dim, config.model.readout_hidden_dim)
+        self.assertGreater(sum(parameter.numel() for parameter in model.parameters()), 0)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in model.parameters()),
+            sum(parameter.numel() for parameter in named_parameters.values()),
+        )
+        self.assertTrue(all(parameter.requires_grad for parameter in named_parameters.values()))
+        self.assertTrue(all(parameter.ndim > 0 for parameter in named_parameters.values()))
+
 
 if __name__ == "__main__":
     unittest.main()
