@@ -92,7 +92,7 @@
 - [x] **T8.7** Implementar readout.
 - [x] **T8.8** Implementar `encode()`.
 - [x] **T8.9** Probar forward/backward.
-- [ ] **T8.10** Verificar shapes y parámetros.
+- [x] **T8.10** Verificar shapes y parámetros.
 
 ## Fase 9. `07_gnn_graph_generation.ipynb`
 
