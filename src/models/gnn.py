@@ -232,6 +232,7 @@ class GINEMessagePassingStack(_MessagePassingStackBase):
         self.hidden_dim = config.model.hidden_dim
         self.edge_dim = edge_dim
         self.num_layers = config.model.num_message_passing_layers
+        self.residual_connections = config.model.residual_connections
         self.normalization = normalization.lower()
         self.activation = activation.lower()
         self.layers = nn.ModuleList(
@@ -261,7 +262,10 @@ class GINEMessagePassingStack(_MessagePassingStackBase):
             self.activations,
             self.dropouts,
         ):
+            residual = x
             x = dropout(activation(norm(layer(x, edge_index, edge_attr))))
+            if self.residual_connections:
+                x = x + residual
         return x
 
 

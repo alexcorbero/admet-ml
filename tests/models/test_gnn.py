@@ -1,6 +1,7 @@
 """Tests for the T8.1 atomic-number embedding."""
 
 import unittest
+from unittest.mock import patch
 
 try:
     import torch
@@ -149,6 +150,27 @@ class GINEMessagePassingStackTests(unittest.TestCase):
             GINEMessagePassingStack(config, edge_dim=3, normalization="batch")
         with self.assertRaisesRegex(ValueError, "activation"):
             GINEMessagePassingStack(config, edge_dim=3, activation="gelu")
+
+    def test_applies_configured_residual_connection(self):
+        config = GNNConfig(
+            model=ModelConfig(
+                hidden_dim=4,
+                num_message_passing_layers=1,
+                dropout=0.0,
+                residual_connections=True,
+            )
+        )
+        stack = GINEMessagePassingStack.from_config(
+            config, edge_dim=len(get_edge_feature_names(config.graph))
+        )
+        x = torch.randn((2, 4), dtype=torch.float32)
+        edge_index = torch.tensor([[0], [1]], dtype=torch.long)
+        edge_attr = torch.randn((1, stack.edge_dim), dtype=torch.float32)
+
+        with patch.object(stack.layers[0], "forward", return_value=torch.zeros_like(x)):
+            result = stack(x, edge_index, edge_attr)
+
+        self.assertTrue(torch.allclose(result, x))
 
 
 if __name__ == "__main__":
