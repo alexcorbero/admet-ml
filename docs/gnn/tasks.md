@@ -79,7 +79,7 @@
 - [x] **T7.4** Implementar transformaciones.
 - [x] **T7.5** Implementar guardado/carga de estadísticas.
 - [x] **T7.6** Probar ausencia de leakage.
-- [ ] **T7.7** Verificar valores inválidos neutros.
+- [x] **T7.7** Verificar valores inválidos neutros.
 
 ## Fase 8. Modelo (`src/models/gnn.py`)
 
