@@ -74,20 +74,23 @@ def density_field_derivatives(
     )
 
 
-def _number_density_from_geometry(
+def _density_from_geometry(
     coords: np.ndarray,
     mapped_symbols: np.ndarray,
     atomic_radii: np.ndarray,
+    atom_weights: np.ndarray,
     config: AtomicFeaturesConfig,
 ) -> np.ndarray:
-    """Build the configured per-atom number-density columns.
+    """Build the configured per-atom density columns for one weight type.
 
-    This is deliberately limited to ``rho``. Curvature, validity masks,
-    charge weights, and numeric transformations belong to later tasks.
+    ``atom_weights`` is either one per atom for number density or the
+    corresponding Gasteiger charge for charge density. Curvature, validity
+    masks, and numeric transformations belong to later tasks.
     """
     coords = np.asarray(coords, dtype=float)
     mapped_symbols = np.asarray(mapped_symbols)
     atomic_radii = np.asarray(atomic_radii, dtype=float)
+    atom_weights = np.asarray(atom_weights, dtype=float)
 
     n_atoms = len(coords)
     columns: list[np.ndarray] = []
@@ -102,7 +105,7 @@ def _number_density_from_geometry(
 
             source_coords = coords[source_indices]
             source_radii = atomic_radii[source_indices]
-            source_weights = np.ones(source_indices.size, dtype=float)
+            source_weights = atom_weights[source_indices]
 
             differences = (
                 coords[:, None, :]
@@ -141,12 +144,12 @@ def build_density_features(
     conf_id: int,
     config: AtomicFeaturesConfig,
 ) -> np.ndarray:
-    """Return local per-atom number-density features as ``[N, F_dg]``.
+    """Return local per-atom density features as ``[N, F_dg]``.
 
     Coordinates and van der Waals radii follow the existing G6 helpers, and
     density values use the shared analytical G6 derivative implementation.
-    The current task intentionally supports only number density; charge and
-    curvature are rejected until their dedicated tasks are implemented.
+    Number and optional charge density are supported here. Curvature remains
+    reserved for its dedicated later task.
     """
     if not isinstance(config, AtomicFeaturesConfig):
         raise TypeError("config must be an AtomicFeaturesConfig instance.")
@@ -158,10 +161,6 @@ def build_density_features(
     if config.curvature_enabled:
         raise NotImplementedError(
             "curvature features are implemented in T4.5 and later."
-        )
-    if config.density_types != ("number",):
-        raise NotImplementedError(
-            "charge density features are implemented in T4.4 and later."
         )
 
     from src.features.descriptors_3d import get_coordinates
@@ -176,12 +175,31 @@ def build_density_features(
     )
     atomic_radii = get_vdw_radii(mol=mol)
 
-    density = _number_density_from_geometry(
-        coords=coords,
-        mapped_symbols=mapped_symbols,
-        atomic_radii=atomic_radii,
-        config=config,
-    )
+    weights_by_type = {
+        "number": np.ones(n_atoms, dtype=float),
+    }
+    if "charge" in config.density_types:
+        from src.features.dg_gl_features import get_gasteiger_charges
+
+        weights_by_type["charge"] = get_gasteiger_charges(mol=mol)
+
+    density_columns: list[np.ndarray] = []
+    for density_type in config.density_types:
+        density_columns.extend(
+            _density_from_geometry(
+                coords=coords,
+                mapped_symbols=mapped_symbols,
+                atomic_radii=atomic_radii,
+                atom_weights=weights_by_type[density_type],
+                config=config,
+            ).T
+        )
+
+    if not density_columns:
+        density = np.empty((n_atoms, 0), dtype=float)
+    else:
+        density = np.column_stack(density_columns)
+
     return np.asarray(density, dtype=np.float32)
 
 

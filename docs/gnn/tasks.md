@@ -43,7 +43,7 @@
 
 - [x] **T4.1** Definir canales y nombres.
 - [x] **T4.2** Reutilizar derivadas analíticas de G6.
-- [ ] **T4.3** Implementar densidad por átomo.
+- [x] **T4.3** Implementar densidad por átomo.
 - [ ] **T4.4** Implementar densidad por carga opcional.
 - [ ] **T4.5** Implementar `H`, `K`, `kappa_min`, `kappa_max`.
 - [ ] **T4.6** Implementar máscaras de validez.
