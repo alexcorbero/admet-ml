@@ -1,4 +1,4 @@
-"""Tests for per-atom number and charge density features (T4.3/T4.4)."""
+"""Tests for local number, charge, and curvature features (T4.3-T4.5)."""
 
 import sys
 import types
@@ -175,16 +175,80 @@ class DensityFeatureBuildTests(unittest.TestCase):
         self.assertEqual(result.shape, (4, 0))
         self.assertEqual(result.dtype, np.float32)
 
-    def test_later_density_and_curvature_tasks_are_not_implemented_here(self):
-        mol = Mock()
-        mol.GetNumAtoms.return_value = 1
+    def test_curvature_values_are_interleaved_per_local_channel(self):
+        coords = np.asarray(
+            [
+                [0.0, 0.0, 0.0],
+                [3.0, 0.0, 0.0],
+                [0.0, 4.0, 0.0],
+            ]
+        )
+        mapped_symbols = np.asarray(["C", "O", "Other"])
+        radii = np.asarray([1.0, 1.1, 1.2])
 
-        curvature_config = AtomicFeaturesConfig(
+        g6_module = types.ModuleType("src.features.dg_gl_features")
+        g6_module.radial_kernel_derivatives = Mock()
+        g6_module.density_field_derivatives = Mock(
+            return_value=(
+                np.ones(3),
+                np.zeros((3, 3)),
+                np.zeros((3, 3, 3)),
+            )
+        )
+        g6_module.get_vdw_radii = Mock(return_value=radii)
+
+        def fake_curvature(**kwargs):
+            target_indices = np.flatnonzero(
+                mapped_symbols == kwargs["target_element"]
+            )
+            target_value = float(target_indices[0] + 1)
+            return {
+                "H": np.full(target_indices.size, target_value),
+                "K": np.full(target_indices.size, target_value + 10),
+                "kappa_min": np.full(target_indices.size, target_value + 20),
+                "kappa_max": np.full(target_indices.size, target_value + 30),
+            }
+
+        g6_module.element_interactive_curvature_at_atoms = fake_curvature
+
+        coordinates_module = types.ModuleType("src.features.descriptors_3d")
+        coordinates_module.get_coordinates = Mock(return_value=coords)
+        source_module = types.ModuleType("src.features.density_features")
+        source_module.get_mapped_atom_symbols = Mock(
+            return_value=mapped_symbols
+        )
+
+        mol = Mock()
+        mol.GetNumAtoms.return_value = len(coords)
+        config = AtomicFeaturesConfig(
             density_enabled=True,
             curvature_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((3.0, 0.5),),
         )
-        with self.assertRaises(NotImplementedError):
-            build_density_features(mol, conf_id=0, config=curvature_config)
+
+        with patch.dict(
+            sys.modules,
+            {
+                "src.features.dg_gl_features": g6_module,
+                "src.features.descriptors_3d": coordinates_module,
+                "src.features.density_features": source_module,
+            },
+        ):
+            result = build_density_features(mol, conf_id=7, config=config)
+
+        # Two source channels (C and Other), one kernel, four curvature
+        # values per channel. The validity mask is intentionally deferred.
+        self.assertEqual(result.shape, (3, 10))
+        np.testing.assert_array_equal(
+            result[0], [1, 1, 11, 21, 31, 1, 1, 11, 21, 31]
+        )
+        np.testing.assert_array_equal(
+            result[1], [1, 2, 12, 22, 32, 1, 2, 12, 22, 32]
+        )
+        np.testing.assert_array_equal(
+            result[2], [1, 3, 13, 23, 33, 1, 3, 13, 23, 33]
+        )
 
 
 if __name__ == "__main__":

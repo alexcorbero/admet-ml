@@ -15,6 +15,13 @@ _CURVATURE_FEATURE_NAMES = (
     "curvature_valid",
 )
 
+_CURVATURE_VALUE_NAMES = (
+    "H",
+    "K",
+    "kappa_min",
+    "kappa_max",
+)
+
 
 def _source_channels(config: AtomicFeaturesConfig) -> tuple[str, ...]:
     """Return configured source-element channels, including ``Other``."""
@@ -139,6 +146,66 @@ def _density_from_geometry(
     return np.column_stack(columns)
 
 
+def _curvature_from_geometry(
+    coords: np.ndarray,
+    mapped_symbols: np.ndarray,
+    atomic_radii: np.ndarray,
+    atom_weights: np.ndarray,
+    config: AtomicFeaturesConfig,
+) -> np.ndarray:
+    """Build per-atom curvature values for one density weight type.
+
+    G6 evaluates one target element at a time. The target-wise results are
+    placed back into the original atom order so each output column remains a
+    node feature. Validity masks and neutral replacement are intentionally
+    left to T4.6/T4.7.
+    """
+    from src.features.dg_gl_features import (
+        element_interactive_curvature_at_atoms,
+    )
+
+    coords = np.asarray(coords, dtype=float)
+    mapped_symbols = np.asarray(mapped_symbols)
+    atomic_radii = np.asarray(atomic_radii, dtype=float)
+    atom_weights = np.asarray(atom_weights, dtype=float)
+    n_atoms = len(coords)
+    target_elements = tuple(dict.fromkeys(mapped_symbols.tolist()))
+    columns: list[np.ndarray] = []
+
+    for source_element in _source_channels(config):
+        for order, tau in config.dg_kernel_configs:
+            values_by_name = {
+                name: np.full(n_atoms, np.nan, dtype=float)
+                for name in _CURVATURE_VALUE_NAMES
+            }
+
+            for target_element in target_elements:
+                target_indices = np.flatnonzero(
+                    mapped_symbols == target_element
+                )
+                curvature = element_interactive_curvature_at_atoms(
+                    coords=coords,
+                    mapped_symbols=mapped_symbols,
+                    atomic_radii=atomic_radii,
+                    atom_weights=atom_weights,
+                    target_element=target_element,
+                    source_element=source_element,
+                    kernel=config.dg_kernel,
+                    order=order,
+                    tau=tau,
+                )
+
+                for name in _CURVATURE_VALUE_NAMES:
+                    values_by_name[name][target_indices] = curvature[name]
+
+            columns.extend(values_by_name[name] for name in _CURVATURE_VALUE_NAMES)
+
+    if not columns:
+        return np.empty((n_atoms, 0), dtype=float)
+
+    return np.column_stack(columns)
+
+
 def build_density_features(
     mol,
     conf_id: int,
@@ -148,8 +215,9 @@ def build_density_features(
 
     Coordinates and van der Waals radii follow the existing G6 helpers, and
     density values use the shared analytical G6 derivative implementation.
-    Number and optional charge density are supported here. Curvature remains
-    reserved for its dedicated later task.
+    Number and optional charge density are supported here. When enabled,
+    curvature values are emitted per local source channel; validity masks and
+    neutral replacement remain reserved for later tasks.
     """
     if not isinstance(config, AtomicFeaturesConfig):
         raise TypeError("config must be an AtomicFeaturesConfig instance.")
@@ -157,11 +225,6 @@ def build_density_features(
     n_atoms = int(mol.GetNumAtoms())
     if not config.density_enabled:
         return np.empty((n_atoms, 0), dtype=np.float32)
-
-    if config.curvature_enabled:
-        raise NotImplementedError(
-            "curvature features are implemented in T4.5 and later."
-        )
 
     from src.features.descriptors_3d import get_coordinates
     from src.features.dg_gl_features import get_vdw_radii
@@ -185,15 +248,39 @@ def build_density_features(
 
     density_columns: list[np.ndarray] = []
     for density_type in config.density_types:
-        density_columns.extend(
-            _density_from_geometry(
+        atom_weights = weights_by_type[density_type]
+        density_matrix = _density_from_geometry(
+            coords=coords,
+            mapped_symbols=mapped_symbols,
+            atomic_radii=atomic_radii,
+            atom_weights=atom_weights,
+            config=config,
+        )
+        curvature_matrix = (
+            _curvature_from_geometry(
                 coords=coords,
                 mapped_symbols=mapped_symbols,
                 atomic_radii=atomic_radii,
-                atom_weights=weights_by_type[density_type],
+                atom_weights=atom_weights,
                 config=config,
-            ).T
+            )
+            if config.curvature_enabled
+            else None
         )
+
+        if curvature_matrix is None:
+            density_columns.extend(density_matrix.T)
+        else:
+            n_channels = len(_source_channels(config)) * len(
+                config.dg_kernel_configs
+            )
+            for channel_index in range(n_channels):
+                density_columns.append(density_matrix[:, channel_index])
+                curvature_start = channel_index * len(_CURVATURE_VALUE_NAMES)
+                curvature_end = curvature_start + len(_CURVATURE_VALUE_NAMES)
+                density_columns.extend(
+                    curvature_matrix[:, curvature_start:curvature_end].T
+                )
 
     if not density_columns:
         density = np.empty((n_atoms, 0), dtype=float)
