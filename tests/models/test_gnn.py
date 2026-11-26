@@ -8,7 +8,8 @@ except ModuleNotFoundError:  # pragma: no cover - environment dependent
     torch = None
 
 from src.gnn.config import GNNConfig, ModelConfig
-from src.models.gnn import AtomicNumberEmbedding
+from src.gnn.graph_builder import get_node_feature_names
+from src.models.gnn import AtomicNumberEmbedding, NodeFeatureEncoder
 
 
 @unittest.skipUnless(torch is not None, "PyTorch is not installed")
@@ -39,6 +40,29 @@ class AtomicNumberEmbeddingTests(unittest.TestCase):
             embedding(torch.tensor([[6]], dtype=torch.long))
         with self.assertRaisesRegex(ValueError, "between 1 and 118"):
             embedding(torch.tensor([0, 119], dtype=torch.long))
+
+
+@unittest.skipUnless(torch is not None, "PyTorch is not installed")
+class NodeFeatureEncoderTests(unittest.TestCase):
+    def test_combines_z_embedding_and_x_into_hidden_vectors(self):
+        config = GNNConfig(model=ModelConfig(hidden_dim=8))
+        encoder = NodeFeatureEncoder(config)
+        x = torch.zeros((3, len(get_node_feature_names(config))), dtype=torch.float32)
+
+        result = encoder(torch.tensor([6, 8, 17], dtype=torch.long), x)
+
+        self.assertEqual(tuple(result.shape), (3, 8))
+        self.assertTrue(torch.isfinite(result).all().item())
+        self.assertEqual(encoder.projection.in_features, 8 + x.shape[1])
+
+    def test_rejects_node_feature_shape_mismatch(self):
+        config = GNNConfig(model=ModelConfig(hidden_dim=8))
+        encoder = NodeFeatureEncoder(config)
+        with self.assertRaisesRegex(ValueError, "feature columns"):
+            encoder(
+                torch.tensor([6], dtype=torch.long),
+                torch.zeros((1, 1), dtype=torch.float32),
+            )
 
 
 if __name__ == "__main__":

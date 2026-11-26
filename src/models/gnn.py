@@ -1,7 +1,7 @@
-"""Atomic-number embedding for the G7 molecular GNN.
+"""Atomic-number embedding and node encoder for the G7 molecular GNN.
 
-Only the atom embedding belongs to T8.1. Node encoding, message passing,
-pooling, and readout are intentionally implemented in later tasks.
+The atom embedding belongs to T8.1 and the node encoder to T8.2. Message
+passing, pooling, and readout are intentionally implemented in later tasks.
 """
 
 from __future__ import annotations
@@ -13,10 +13,14 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when torch is absent
     torch = None
     nn = None
 
+from src.gnn.config import GNNConfig
+from src.gnn.graph_builder import get_node_feature_names
+
 
 _MAX_ATOMIC_NUMBER = 118
 _NUM_ATOMIC_EMBEDDINGS = _MAX_ATOMIC_NUMBER + 1
 _EmbeddingBase = nn.Module if nn is not None else object
+_NodeEncoderBase = nn.Module if nn is not None else object
 
 
 class AtomicNumberEmbedding(_EmbeddingBase):
@@ -74,4 +78,62 @@ class AtomicNumberEmbedding(_EmbeddingBase):
                 f"z values must be between 1 and {_MAX_ATOMIC_NUMBER}."
             )
         return self.embedding(z)
+
+
+class NodeFeatureEncoder(_NodeEncoderBase):
+    """Combine atomic-number embeddings with the graph node feature tensor.
+
+    This module only prepares per-node representations. It does not inspect
+    edges or perform message passing; those responsibilities belong to T8.3+
+    tasks.
+    """
+
+    def __init__(self, config: GNNConfig) -> None:
+        if nn is None:
+            raise ImportError(
+                "NodeFeatureEncoder requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(config, GNNConfig):
+            raise TypeError("config must be a GNNConfig instance.")
+        super().__init__()
+        self.hidden_dim = config.model.hidden_dim
+        self.num_node_features = len(get_node_feature_names(config))
+        self.atom_embedding = AtomicNumberEmbedding(self.hidden_dim)
+        self.projection = nn.Linear(
+            self.hidden_dim + self.num_node_features,
+            self.hidden_dim,
+        )
+
+    @classmethod
+    def from_config(cls, config: GNNConfig) -> "NodeFeatureEncoder":
+        """Build the node encoder from a validated GNN configuration."""
+        return cls(config)
+
+    def forward(self, z, x):
+        """Return one encoded vector per node from ``z`` and ``x``."""
+        if torch is None:  # pragma: no cover - constructor raises first
+            raise ImportError(
+                "NodeFeatureEncoder requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(z, torch.Tensor) or not isinstance(x, torch.Tensor):
+            raise TypeError("z and x must be torch.Tensor instances.")
+        if z.ndim != 1:
+            raise ValueError(f"z must have shape [N]; got {tuple(z.shape)}.")
+        if x.ndim != 2:
+            raise ValueError(f"x must have shape [N, F]; got {tuple(x.shape)}.")
+        if x.shape[0] != z.shape[0]:
+            raise ValueError("z and x must contain the same number of nodes.")
+        if x.shape[1] != self.num_node_features:
+            raise ValueError(
+                f"x must have {self.num_node_features} feature columns; "
+                f"got {x.shape[1]}."
+            )
+        if not x.is_floating_point():
+            raise TypeError("x must use a floating-point dtype.")
+        atom_vectors = self.atom_embedding(z)
+        return self.projection(torch.cat((atom_vectors, x), dim=1))
+
+
+# Short alias for callers that use the architectural term directly.
+NodeEncoder = NodeFeatureEncoder
 
