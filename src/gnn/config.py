@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -502,6 +503,11 @@ class GNNConfig:
         """Return the complete configuration using JSON-native containers."""
         return _json_compatible(asdict(self))
 
+    @property
+    def graph_config_id(self) -> str:
+        """Return the reproducible ID for the graph-construction configuration."""
+        return get_graph_config_id(self)
+
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> GNNConfig:
         """Build a validated configuration from a complete mapping."""
@@ -578,4 +584,28 @@ class GNNConfig:
     def load_json(cls, path: str | Path) -> GNNConfig:
         """Load and validate a configuration from a UTF-8 JSON file."""
         return cls.from_json(Path(path).read_text(encoding="utf-8"))
+
+
+def get_graph_config_id(config: GNNConfig) -> str:
+    """Return a stable SHA-256 ID for the raw graph configuration.
+
+    Only settings that affect raw graph construction are included: graph
+    connectivity/edge features and atomic/density features. Model and
+    training settings deliberately do not affect this cache identifier.
+    """
+    if not isinstance(config, GNNConfig):
+        raise TypeError("config must be a GNNConfig instance.")
+
+    config_dict = config.to_dict()
+    payload = {
+        "graph": config_dict["graph"],
+        "atomic_features": config_dict["atomic_features"],
+    }
+    canonical_json = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 

@@ -16,6 +16,7 @@ from src.gnn.config import (
     GraphConfig,
     ModelConfig,
     TrainingConfig,
+    get_graph_config_id,
 )
 
 
@@ -278,6 +279,33 @@ class GNNConfigTests(unittest.TestCase):
         self.assertIsInstance(config.atomic_features, AtomicFeaturesConfig)
         self.assertIsInstance(config.model, ModelConfig)
         self.assertIsInstance(config.training, TrainingConfig)
+
+    def test_graph_config_id_is_stable_and_exposed_on_config(self):
+        config = GNNConfig()
+        self.assertEqual(get_graph_config_id(config), get_graph_config_id(config))
+        self.assertEqual(config.graph_config_id, get_graph_config_id(config))
+        self.assertEqual(len(config.graph_config_id), 64)
+
+    def test_graph_config_id_ignores_model_and_training_settings(self):
+        base = GNNConfig()
+        changed_runtime = GNNConfig(
+            model=ModelConfig(hidden_dim=64),
+            training=TrainingConfig(batch_size=8),
+        )
+        self.assertEqual(base.graph_config_id, changed_runtime.graph_config_id)
+
+    def test_graph_config_id_changes_with_graph_settings(self):
+        base = GNNConfig()
+        changed_graph = GNNConfig(graph=GraphConfig(cutoff=4.0))
+        changed_features = GNNConfig(
+            atomic_features=AtomicFeaturesConfig(density_enabled=True)
+        )
+        self.assertNotEqual(base.graph_config_id, changed_graph.graph_config_id)
+        self.assertNotEqual(base.graph_config_id, changed_features.graph_config_id)
+
+    def test_graph_config_id_rejects_invalid_config(self):
+        with self.assertRaises(TypeError):
+            get_graph_config_id(None)
 
     def test_custom_nested_configs_are_preserved(self):
         config = GNNConfig(
