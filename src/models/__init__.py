@@ -9,6 +9,8 @@ from .gnn import (
     GlobalPooling,
     GraphReadout,
     GraphPooling,
+    GNNEncoder,
+    MolecularGNN,
     MessagePassingStack,
     Readout,
     ScalarReadout,
@@ -30,4 +32,6 @@ __all__ = [
     "ScalarReadout",
     "GraphReadout",
     "Readout",
+    "MolecularGNN",
+    "GNNEncoder",
 ]

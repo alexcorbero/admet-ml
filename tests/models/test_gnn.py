@@ -1,6 +1,7 @@
 """Tests for the T8.1 atomic-number embedding."""
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 try:
@@ -19,6 +20,7 @@ from src.models.gnn import (
     GINEMessagePassing,
     GINEMessagePassingStack,
     GlobalPooling,
+    MolecularGNN,
     ScalarReadout,
     NodeFeatureEncoder,
 )
@@ -225,6 +227,53 @@ class ScalarReadoutTests(unittest.TestCase):
         readout = ScalarReadout(input_dim=5, hidden_dim=3)
         with self.assertRaisesRegex(ValueError, "shape"):
             readout(torch.zeros((2, 4), dtype=torch.float32))
+
+
+@unittest.skipUnless(
+    torch is not None
+    and torch_geometric is not None
+    and get_edge_feature_names is not None,
+    "PyTorch, PyTorch Geometric, and RDKit are not installed",
+)
+class MolecularGNNEncodeTests(unittest.TestCase):
+    def test_encode_returns_one_embedding_per_graph(self):
+        config = GNNConfig(
+            model=ModelConfig(
+                hidden_dim=8,
+                num_message_passing_layers=1,
+                dropout=0.0,
+                residual_connections=False,
+            )
+        )
+        edge_dim = len(get_edge_feature_names(config.graph))
+        model = MolecularGNN.from_config(config, edge_dim=edge_dim)
+        data = SimpleNamespace(
+            z=torch.tensor([6, 8, 17], dtype=torch.long),
+            x=torch.randn((3, 5), dtype=torch.float32),
+            edge_index=torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long),
+            edge_attr=torch.randn((4, edge_dim), dtype=torch.float32),
+            batch=torch.tensor([0, 0, 1], dtype=torch.long),
+        )
+
+        embedding = model.encode(data)
+
+        self.assertEqual(tuple(embedding.shape), (2, 8))
+        self.assertTrue(torch.isfinite(embedding).all().item())
+
+    def test_encode_defaults_to_a_single_graph_without_batch(self):
+        config = GNNConfig(model=ModelConfig(hidden_dim=4, num_message_passing_layers=1))
+        edge_dim = len(get_edge_feature_names(config.graph))
+        model = MolecularGNN(config, edge_dim=edge_dim)
+        data = SimpleNamespace(
+            z=torch.tensor([6, 8], dtype=torch.long),
+            x=torch.randn((2, 3), dtype=torch.float32),
+            edge_index=torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
+            edge_attr=torch.randn((2, edge_dim), dtype=torch.float32),
+        )
+
+        embedding = model.encode(data)
+
+        self.assertEqual(tuple(embedding.shape), (1, 4))
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ _MessagePassingBase = nn.Module if nn is not None else object
 _MessagePassingStackBase = nn.Module if nn is not None else object
 _PoolingBase = nn.Module if nn is not None else object
 _ReadoutBase = nn.Module if nn is not None else object
+_MolecularGNNBase = nn.Module if nn is not None else object
 
 
 class AtomicNumberEmbedding(_EmbeddingBase):
@@ -401,6 +402,60 @@ class ScalarReadout(_ReadoutBase):
         return self.network(graph_embeddings)
 
 
+class MolecularGNN(_MolecularGNNBase):
+    """Compose node encoding, message passing, and pooling for ``encode``.
+
+    The returned tensor is a graph-level embedding. Prediction through the
+    readout and the public ``forward`` training path are intentionally left
+    to their later tasks.
+    """
+
+    def __init__(self, config: GNNConfig, edge_dim: int) -> None:
+        if nn is None:
+            raise ImportError(
+                "MolecularGNN requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(config, GNNConfig):
+            raise TypeError("config must be a GNNConfig instance.")
+        super().__init__()
+        self.config = config
+        self.node_encoder = NodeFeatureEncoder(config)
+        self.message_passing = GINEMessagePassingStack.from_config(config, edge_dim)
+        self.pooling = GlobalPooling.from_config(config)
+        self.readout = ScalarReadout.from_config(config)
+
+    @classmethod
+    def from_config(cls, config: GNNConfig, edge_dim: int) -> "MolecularGNN":
+        """Build the model components from a validated configuration."""
+        return cls(config, edge_dim)
+
+    def encode(self, data):
+        """Return one pooled embedding per graph in a PyG-like data object."""
+        if torch is None:  # pragma: no cover - constructor raises first
+            raise ImportError(
+                "MolecularGNN requires PyTorch; install the model dependencies."
+            )
+        if data is None:
+            raise TypeError("data must provide z, x, edge_index, and edge_attr.")
+        required = ("z", "x", "edge_index", "edge_attr")
+        missing = [name for name in required if not hasattr(data, name)]
+        if missing:
+            raise ValueError(
+                "data is missing required fields: " + ", ".join(missing) + "."
+            )
+        z, x = data.z, data.x
+        batch = getattr(data, "batch", None)
+        if batch is None:
+            batch = torch.zeros(z.shape[0], dtype=torch.long, device=z.device)
+        node_states = self.node_encoder(z, x)
+        node_states = self.message_passing(
+            node_states,
+            data.edge_index,
+            data.edge_attr,
+        )
+        return self.pooling(node_states, batch)
+
+
 # Descriptive alias for callers that use the convolution terminology.
 GINEConvLayer = GINEMessagePassing
 GINEStack = GINEMessagePassingStack
@@ -408,4 +463,5 @@ MessagePassingStack = GINEMessagePassingStack
 GraphPooling = GlobalPooling
 GraphReadout = ScalarReadout
 Readout = ScalarReadout
+GNNEncoder = MolecularGNN
 
