@@ -6,6 +6,8 @@ from .gnn import (
     GINEMessagePassing,
     GINEMessagePassingStack,
     GINEStack,
+    GlobalPooling,
+    GraphPooling,
     MessagePassingStack,
     NodeEncoder,
     NodeFeatureEncoder,
@@ -20,4 +22,6 @@ __all__ = [
     "GINEMessagePassingStack",
     "GINEStack",
     "MessagePassingStack",
+    "GlobalPooling",
+    "GraphPooling",
 ]

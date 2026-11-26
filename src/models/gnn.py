@@ -18,6 +18,7 @@ _EmbeddingBase = nn.Module if nn is not None else object
 _NodeEncoderBase = nn.Module if nn is not None else object
 _MessagePassingBase = nn.Module if nn is not None else object
 _MessagePassingStackBase = nn.Module if nn is not None else object
+_PoolingBase = nn.Module if nn is not None else object
 
 
 class AtomicNumberEmbedding(_EmbeddingBase):
@@ -269,8 +270,82 @@ class GINEMessagePassingStack(_MessagePassingStackBase):
         return x
 
 
+class GlobalPooling(_PoolingBase):
+    """Aggregate node states into one representation per graph.
+
+    ``batch`` assigns every node to a graph. The supported reductions mirror
+    :class:`ModelConfig`: ``sum``, ``mean``, ``max``, and ``mean_max``.
+    This module only creates graph embeddings; prediction readout belongs to
+    T8.7.
+    """
+
+    _SUPPORTED = frozenset(("sum", "mean", "max", "mean_max"))
+
+    def __init__(self, pooling: str = "mean") -> None:
+        if nn is None:
+            raise ImportError(
+                "GlobalPooling requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(pooling, str) or pooling.lower() not in self._SUPPORTED:
+            raise ValueError(
+                "pooling must be one of ['max', 'mean', 'mean_max', 'sum']."
+            )
+        super().__init__()
+        self.pooling = pooling.lower()
+
+    @classmethod
+    def from_config(cls, config: GNNConfig) -> "GlobalPooling":
+        """Build pooling from ``config.model.pooling``."""
+        if not isinstance(config, GNNConfig):
+            raise TypeError("config must be a GNNConfig instance.")
+        return cls(config.model.pooling)
+
+    def forward(self, x, batch):
+        """Return one pooled row per graph in the batch."""
+        if torch is None:  # pragma: no cover - constructor raises first
+            raise ImportError(
+                "GlobalPooling requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(x, torch.Tensor) or not isinstance(batch, torch.Tensor):
+            raise TypeError("x and batch must be torch.Tensor instances.")
+        if x.ndim != 2:
+            raise ValueError(f"x must have shape [N, H]; got {tuple(x.shape)}.")
+        if batch.ndim != 1 or batch.shape[0] != x.shape[0]:
+            raise ValueError("batch must have shape [N] matching x.")
+        if batch.dtype != torch.long:
+            raise TypeError("batch must use torch.long.")
+        if not x.is_floating_point():
+            raise TypeError("x must use a floating-point dtype.")
+        if batch.numel() == 0:
+            return x.new_empty((0, x.shape[1]))
+        if bool(torch.any(batch < 0)):
+            raise ValueError("batch graph indices must be non-negative.")
+
+        num_graphs = int(batch.max().item()) + 1
+        counts = torch.bincount(batch, minlength=num_graphs).to(dtype=x.dtype)
+        pooled_sum = x.new_zeros((num_graphs, x.shape[1]))
+        pooled_sum.index_add_(0, batch, x)
+        if self.pooling == "sum":
+            return pooled_sum
+
+        if self.pooling in ("mean", "mean_max"):
+            pooled_mean = pooled_sum / counts.clamp_min(1).unsqueeze(1)
+            if self.pooling == "mean":
+                return pooled_mean
+
+        pooled_max = x.new_full((num_graphs, x.shape[1]), float("-inf"))
+        for graph_index in range(num_graphs):
+            graph_nodes = x[batch == graph_index]
+            if graph_nodes.numel():
+                pooled_max[graph_index] = graph_nodes.max(dim=0).values
+        if self.pooling == "max":
+            return pooled_max
+        return torch.cat((pooled_mean, pooled_max), dim=1)
+
+
 # Descriptive alias for callers that use the convolution terminology.
 GINEConvLayer = GINEMessagePassing
 GINEStack = GINEMessagePassingStack
 MessagePassingStack = GINEMessagePassingStack
+GraphPooling = GlobalPooling
 

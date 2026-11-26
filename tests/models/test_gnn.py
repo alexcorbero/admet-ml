@@ -18,6 +18,7 @@ from src.models.gnn import (
     AtomicNumberEmbedding,
     GINEMessagePassing,
     GINEMessagePassingStack,
+    GlobalPooling,
     NodeFeatureEncoder,
 )
 
@@ -171,6 +172,36 @@ class GINEMessagePassingStackTests(unittest.TestCase):
             result = stack(x, edge_index, edge_attr)
 
         self.assertTrue(torch.allclose(result, x))
+
+
+@unittest.skipUnless(torch is not None, "PyTorch is not installed")
+class GlobalPoolingTests(unittest.TestCase):
+    def setUp(self):
+        self.x = torch.tensor(
+            [[1.0, 5.0], [3.0, 1.0], [10.0, 2.0]], dtype=torch.float32
+        )
+        self.batch = torch.tensor([0, 0, 1], dtype=torch.long)
+
+    def test_supports_configured_reductions(self):
+        expected = {
+            "sum": torch.tensor([[4.0, 6.0], [10.0, 2.0]]),
+            "mean": torch.tensor([[2.0, 3.0], [10.0, 2.0]]),
+            "max": torch.tensor([[3.0, 5.0], [10.0, 2.0]]),
+            "mean_max": torch.tensor(
+                [[2.0, 3.0, 3.0, 5.0], [10.0, 2.0, 10.0, 2.0]]
+            ),
+        }
+        for pooling, target in expected.items():
+            with self.subTest(pooling=pooling):
+                result = GlobalPooling(pooling)(self.x, self.batch)
+                self.assertTrue(torch.allclose(result, target))
+
+    def test_validates_batch_shape_and_dtype(self):
+        pooling = GlobalPooling.from_config(GNNConfig())
+        with self.assertRaisesRegex(ValueError, "matching x"):
+            pooling(self.x, torch.tensor([0], dtype=torch.long))
+        with self.assertRaisesRegex(TypeError, "torch.long"):
+            pooling(self.x, torch.tensor([0, 0, 1], dtype=torch.int32))
 
 
 if __name__ == "__main__":
