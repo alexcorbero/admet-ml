@@ -200,21 +200,25 @@ class GraphDatasetTests(unittest.TestCase):
         fake_torch = types.SimpleNamespace(save=fake_save, load=fake_load)
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = Path(temporary_directory) / "nested" / "graphs.pt"
+            raw_graphs = [
+                types.SimpleNamespace(normalization_state="raw"),
+                types.SimpleNamespace(normalization_state="raw"),
+            ]
             with patch.dict("sys.modules", {"torch": fake_torch}):
                 saved_path = save_graph_dataset(
-                    ["graph-a", "graph-b"],
+                    raw_graphs,
                     str(archive),
-                    metadata={"graph_config_id": "abc", "n": 2},
+                    metadata={"graph_config_id": "abc", "n": 2, "raw_graphs": True},
                 )
                 artifact = load_graph_dataset(str(archive))
 
         self.assertEqual(saved_path, archive)
-        self.assertEqual(artifact.graphs, ["graph-a", "graph-b"])
+        self.assertEqual(artifact.graphs, raw_graphs)
         self.assertEqual(
             artifact.metadata,
             {"graph_config_id": "abc", "n": 2, "raw_graphs": True},
         )
-        self.assertEqual(saved_payloads[archive]["graphs"], ["graph-a", "graph-b"])
+        self.assertEqual(saved_payloads[archive]["graphs"], raw_graphs)
         self.assertTrue(saved_payloads[archive]["metadata"]["raw_graphs"])
 
     def test_persistence_rejects_invalid_envelope_and_metadata(self):
@@ -254,7 +258,7 @@ class GraphDatasetTests(unittest.TestCase):
     def test_load_with_config_validates_compatibility(self):
         config = GNNConfig()
         payload = {
-            "graphs": ["graph"],
+            "graphs": [types.SimpleNamespace(normalization_state="raw")],
             "metadata": {
                 "graph_config_id": config.graph_config_id,
                 "raw_graphs": True,
@@ -265,15 +269,31 @@ class GraphDatasetTests(unittest.TestCase):
         )
         with patch.dict("sys.modules", {"torch": fake_torch}):
             artifact = load_graph_dataset("graphs.pt", config=config)
-        self.assertEqual(artifact.graphs, ["graph"])
+        self.assertEqual(artifact.graphs[0].normalization_state, "raw")
 
     def test_save_rejects_false_raw_graph_marker(self):
         with self.assertRaisesRegex(ValueError, "raw_graphs"):
-            save_graph_dataset([], "graphs.pt", metadata={"raw_graphs": False})
+            save_graph_dataset(
+                [types.SimpleNamespace(normalization_state="raw")],
+                "graphs.pt",
+                metadata={"raw_graphs": False},
+            )
+
+        with self.assertRaisesRegex(ValueError, "explicitly True"):
+            save_graph_dataset(
+                [types.SimpleNamespace(normalization_state="raw")],
+                "graphs.pt",
+                metadata=None,
+            )
 
         with self.assertRaisesRegex(ValueError, "graph 0 is normalized"):
             save_graph_dataset(
-                [types.SimpleNamespace(normalized=True)],
+                [
+                    types.SimpleNamespace(
+                        normalization_state="raw",
+                        normalized=True,
+                    )
+                ],
                 "graphs.pt",
                 metadata={"raw_graphs": True},
             )
@@ -284,7 +304,18 @@ class GraphDatasetTests(unittest.TestCase):
                 GraphDatasetArtifact(graphs=["graph"], metadata={})
             )
 
-        normalized_graph = types.SimpleNamespace(normalized=True)
+        with self.assertRaisesRegex(ValueError, "missing normalization_state"):
+            validate_raw_graph_dataset(
+                GraphDatasetArtifact(
+                    graphs=[types.SimpleNamespace()],
+                    metadata={"raw_graphs": True},
+                )
+            )
+
+        normalized_graph = types.SimpleNamespace(
+            normalization_state="raw",
+            normalized=True,
+        )
         with self.assertRaisesRegex(ValueError, "graph 0 is normalized"):
             validate_raw_graph_dataset(
                 GraphDatasetArtifact(

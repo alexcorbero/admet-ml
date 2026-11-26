@@ -56,10 +56,11 @@ class GraphDatasetArtifact:
 def validate_raw_graph_dataset(artifact: GraphDatasetArtifact) -> None:
     """Raise ``ValueError`` when an artifact is not explicitly raw.
 
-    Raw-cache provenance is recorded by ``raw_graphs=True`` when the archive
-    is written. A cache without that marker is unverifiable and is rejected;
-    an explicit normalization marker on the artifact or a graph is rejected
-    as well. This check does not normalize or inspect split-specific stats.
+    ``raw_graphs=True`` is an explicit archive-level assertion, while every
+    graph must carry the construction provenance
+    ``normalization_state='raw'``. A missing or different graph state is
+    unverifiable and is rejected; an explicit normalization marker on the
+    artifact or a graph is rejected as well.
     """
     if not isinstance(artifact, GraphDatasetArtifact):
         raise TypeError("artifact must be a GraphDatasetArtifact instance.")
@@ -72,6 +73,11 @@ def validate_raw_graph_dataset(artifact: GraphDatasetArtifact) -> None:
         raise ValueError("graph cache is not raw: metadata marks it normalized.")
 
     for graph_index, graph in enumerate(artifact.graphs):
+        if getattr(graph, "normalization_state", None) != "raw":
+            raise ValueError(
+                f"graph cache is not verified as raw: graph {graph_index} "
+                "is missing normalization_state='raw'."
+            )
         if getattr(graph, "normalized", False) is True:
             raise ValueError(
                 f"graph cache is not raw: graph {graph_index} is normalized."
@@ -289,16 +295,16 @@ def save_graph_dataset(
 ) -> Any:
     """Persist raw graphs and optional metadata to a torch archive.
 
-    The graphs are saved without normalization. The reserved ``raw_graphs``
-    metadata marker records that this archive contains raw graphs.
+    The graphs are saved without normalization. Callers must provide the
+    reserved ``raw_graphs=True`` metadata marker; graph-level provenance is
+    checked before anything is written. The marker is never inferred here.
     """
     if metadata is not None and not isinstance(metadata, Mapping):
         raise TypeError("metadata must be a mapping or None.")
 
     archive_metadata = dict(metadata) if metadata is not None else {}
-    if "raw_graphs" in archive_metadata and archive_metadata["raw_graphs"] is not True:
-        raise ValueError("metadata field 'raw_graphs' must be True.")
-    archive_metadata["raw_graphs"] = True
+    if archive_metadata.get("raw_graphs") is not True:
+        raise ValueError("metadata field 'raw_graphs' must be explicitly True.")
     raw_graphs = list(graphs)
     validate_raw_graph_dataset(
         GraphDatasetArtifact(graphs=raw_graphs, metadata=archive_metadata)

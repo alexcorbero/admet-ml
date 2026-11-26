@@ -185,6 +185,7 @@ def build_graph(
     if mol_id is not None:
         data.mol_id = str(mol_id)
     data.conf_id = torch.tensor([int(conf_id)], dtype=torch.long)
+    data.normalization_state = "raw"
     _validate_graph_data(data, config, torch)
 
     return data
