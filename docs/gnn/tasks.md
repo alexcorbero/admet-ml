@@ -50,7 +50,7 @@
 - [x] **T4.7** Implementar valor neutro para curvatura inválida.
 - [x] **T4.8** Implementar transformación numérica configurable.
 - [x] **T4.9** Verificar shapes y ausencia de NaN/Inf.
-- [ ] **T4.10** Añadir tests de `Other`, canales ausentes y singularidades.
+- [x] **T4.10** Añadir tests de `Other`, canales ausentes y singularidades.
 
 ## Fase 5. Grafo (`src/gnn/graph_builder.py`)
 
