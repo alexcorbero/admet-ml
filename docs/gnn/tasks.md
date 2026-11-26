@@ -64,7 +64,7 @@
 ## Fase 6. Dataset y cache (`src/gnn/dataset.py`)
 
 - [x] **T6.1** Definir ID reproducible de configuración.
-- [ ] **T6.2** Implementar generación de grafos del dataset.
+- [x] **T6.2** Implementar generación de grafos del dataset.
 - [ ] **T6.3** Registrar éxitos/fallos.
 - [ ] **T6.4** Implementar persistencia/carga.
 - [ ] **T6.5** Detectar caches incompatibles.

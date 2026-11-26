@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.gnn.config import GNNConfig
-from src.gnn.dataset import build_graph_dataset
+from src.gnn.dataset import build_graph_dataset, build_graph_dataset_with_report
 
 
 class GraphDatasetTests(unittest.TestCase):
@@ -118,6 +118,61 @@ class GraphDatasetTests(unittest.TestCase):
             with self.assertRaises(TypeError):
                 build_graph_dataset([], None)
         builder.assert_not_called()
+
+    def test_report_keeps_successes_and_records_failures(self):
+        records = [
+            {
+                "mol": "valid",
+                "conf_id": 0,
+                "y": 1.0,
+                "smiles": "C",
+                "mol_id": "ok",
+            },
+            {
+                "mol": "invalid",
+                "conf_id": 1,
+                "y": 2.0,
+                "smiles": "N",
+                "mol_id": "bad",
+            },
+        ]
+        with patch(
+            "src.gnn.dataset.build_graph",
+            side_effect=["graph-ok", ValueError("bad conformer")],
+        ):
+            report = build_graph_dataset_with_report(records, GNNConfig())
+
+        self.assertEqual(report.graphs, ["graph-ok"])
+        self.assertEqual(len(report.successes), 1)
+        self.assertEqual(report.successes[0].record_index, 0)
+        self.assertEqual(report.successes[0].mol_id, "ok")
+        self.assertEqual(report.successes[0].graph, "graph-ok")
+        self.assertEqual(len(report.failures), 1)
+        failure = report.failures[0]
+        self.assertEqual(failure.record_index, 1)
+        self.assertEqual(failure.mol_id, "bad")
+        self.assertEqual(failure.smiles, "N")
+        self.assertEqual(failure.error_type, "ValueError")
+        self.assertEqual(failure.error_message, "bad conformer")
+
+    def test_report_records_malformed_records_without_stopping(self):
+        records = [
+            "not-a-record",
+            {
+                "mol": "valid",
+                "conf_id": 0,
+                "y": 1.0,
+                "smiles": "C",
+                "mol_id": "ok",
+            },
+        ]
+        with patch("src.gnn.dataset.build_graph", return_value="graph"):
+            report = build_graph_dataset_with_report(records, GNNConfig())
+
+        self.assertEqual(report.graphs, ["graph"])
+        self.assertEqual(report.failures[0].record_index, 0)
+        self.assertEqual(report.failures[0].error_type, "TypeError")
+        self.assertIn("mapping", report.failures[0].error_message)
 
 
 if __name__ == "__main__":
