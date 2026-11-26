@@ -299,6 +299,10 @@ def save_graph_dataset(
     if "raw_graphs" in archive_metadata and archive_metadata["raw_graphs"] is not True:
         raise ValueError("metadata field 'raw_graphs' must be True.")
     archive_metadata["raw_graphs"] = True
+    raw_graphs = list(graphs)
+    validate_raw_graph_dataset(
+        GraphDatasetArtifact(graphs=raw_graphs, metadata=archive_metadata)
+    )
 
     from pathlib import Path
 
@@ -307,7 +311,7 @@ def save_graph_dataset(
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "graphs": list(graphs),
+        "graphs": raw_graphs,
         "metadata": archive_metadata,
     }
     torch.save(payload, target)

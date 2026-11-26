@@ -271,6 +271,13 @@ class GraphDatasetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "raw_graphs"):
             save_graph_dataset([], "graphs.pt", metadata={"raw_graphs": False})
 
+        with self.assertRaisesRegex(ValueError, "graph 0 is normalized"):
+            save_graph_dataset(
+                [types.SimpleNamespace(normalized=True)],
+                "graphs.pt",
+                metadata={"raw_graphs": True},
+            )
+
     def test_raw_cache_requires_marker_and_rejects_normalized_graphs(self):
         with self.assertRaisesRegex(ValueError, "raw_graphs=True"):
             validate_raw_graph_dataset(
