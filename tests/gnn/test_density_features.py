@@ -1,4 +1,4 @@
-"""Tests for local density, curvature, validity, and neutral values (T4.3-T4.7)."""
+"""Tests for local density, curvature, validity, and neutral values (T4.3-T4.10)."""
 
 import sys
 import types
@@ -12,6 +12,115 @@ from src.gnn.density_features import build_density_features
 
 
 class DensityFeatureBuildTests(unittest.TestCase):
+    def test_other_channel_uses_unlisted_source_atoms(self):
+        coords = np.asarray(
+            [
+                [0.0, 0.0, 0.0],
+                [4.0, 0.0, 0.0],
+            ]
+        )
+        mapped_symbols = np.asarray(["C", "Other"])
+        calls = []
+
+        def fake_derivatives(**kwargs):
+            calls.append(kwargs)
+            n_target = len(kwargs["evaluation_coords"])
+            return (
+                np.full(n_target, float(len(calls))),
+                np.zeros((n_target, 3)),
+                np.zeros((n_target, 3, 3)),
+            )
+
+        g6_module = types.ModuleType("src.features.dg_gl_features")
+        g6_module.radial_kernel_derivatives = Mock()
+        g6_module.density_field_derivatives = fake_derivatives
+        g6_module.get_vdw_radii = Mock(return_value=np.asarray([1.0, 1.0]))
+
+        coordinates_module = types.ModuleType("src.features.descriptors_3d")
+        coordinates_module.get_coordinates = Mock(return_value=coords)
+        source_module = types.ModuleType("src.features.density_features")
+        source_module.get_mapped_atom_symbols = Mock(
+            return_value=mapped_symbols
+        )
+
+        mol = Mock()
+        mol.GetNumAtoms.return_value = 2
+        config = AtomicFeaturesConfig(
+            density_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((3.0, 0.5),),
+        )
+
+        with patch.dict(
+            sys.modules,
+            {
+                "src.features.dg_gl_features": g6_module,
+                "src.features.descriptors_3d": coordinates_module,
+                "src.features.density_features": source_module,
+            },
+        ):
+            result = build_density_features(mol, conf_id=0, config=config)
+
+        self.assertEqual(result.shape, (2, 2))
+        np.testing.assert_array_equal(
+            calls[0]["source_coords"], coords[[0]]
+        )
+        np.testing.assert_array_equal(
+            calls[1]["source_coords"], coords[[1]]
+        )
+        np.testing.assert_array_equal(
+            result,
+            np.asarray([[1.0, 2.0], [1.0, 2.0]], dtype=np.float32),
+        )
+
+    def test_absent_source_channels_are_zero_without_g6_calls(self):
+        coords = np.asarray([[0.0, 0.0, 0.0]])
+        mapped_symbols = np.asarray(["O"])
+        calls = []
+
+        def fake_derivatives(**kwargs):
+            calls.append(kwargs)
+            return (
+                np.asarray([5.0]),
+                np.zeros((1, 3)),
+                np.zeros((1, 3, 3)),
+            )
+
+        g6_module = types.ModuleType("src.features.dg_gl_features")
+        g6_module.radial_kernel_derivatives = Mock()
+        g6_module.density_field_derivatives = fake_derivatives
+        g6_module.get_vdw_radii = Mock(return_value=np.asarray([1.0]))
+
+        coordinates_module = types.ModuleType("src.features.descriptors_3d")
+        coordinates_module.get_coordinates = Mock(return_value=coords)
+        source_module = types.ModuleType("src.features.density_features")
+        source_module.get_mapped_atom_symbols = Mock(
+            return_value=mapped_symbols
+        )
+
+        mol = Mock()
+        mol.GetNumAtoms.return_value = 1
+        config = AtomicFeaturesConfig(
+            density_enabled=True,
+            density_elements=("C", "O"),
+            dg_kernel_configs=((3.0, 0.5),),
+        )
+
+        with patch.dict(
+            sys.modules,
+            {
+                "src.features.dg_gl_features": g6_module,
+                "src.features.descriptors_3d": coordinates_module,
+                "src.features.density_features": source_module,
+            },
+        ):
+            result = build_density_features(mol, conf_id=0, config=config)
+
+        # C and Other are absent; only the O channel reaches G6.
+        self.assertEqual(result.shape, (1, 3))
+        np.testing.assert_array_equal(result[0], [0.0, 5.0, 0.0])
+        self.assertEqual(len(calls), 1)
+
     def test_rejects_non_finite_density_features(self):
         coords = np.asarray([[0.0, 0.0, 0.0]])
         mapped_symbols = np.asarray(["C"])
@@ -446,6 +555,65 @@ class DensityFeatureBuildTests(unittest.TestCase):
             result[1, [1, 2, 3, 4, 7, 8, 9, 10]],
             np.full(8, 7.5, dtype=np.float32),
         )
+
+    def test_singular_curvature_is_neutral_and_masked(self):
+        coords = np.zeros((2, 3))
+        mapped_symbols = np.asarray(["C", "C"])
+        radii = np.asarray([1.0, 1.0])
+
+        g6_module = types.ModuleType("src.features.dg_gl_features")
+        g6_module.radial_kernel_derivatives = Mock()
+        g6_module.density_field_derivatives = Mock(
+            return_value=(
+                np.zeros(2),
+                np.zeros((2, 3)),
+                np.zeros((2, 3, 3)),
+            )
+        )
+        g6_module.get_vdw_radii = Mock(return_value=radii)
+        g6_module.element_interactive_curvature_at_atoms = Mock(
+            return_value={
+                "H": np.asarray([np.nan, np.nan]),
+                "K": np.asarray([np.nan, np.nan]),
+                "kappa_min": np.asarray([np.nan, np.nan]),
+                "kappa_max": np.asarray([np.nan, np.nan]),
+                "valid": np.asarray([False, False]),
+            }
+        )
+
+        coordinates_module = types.ModuleType("src.features.descriptors_3d")
+        coordinates_module.get_coordinates = Mock(return_value=coords)
+        source_module = types.ModuleType("src.features.density_features")
+        source_module.get_mapped_atom_symbols = Mock(
+            return_value=mapped_symbols
+        )
+
+        mol = Mock()
+        mol.GetNumAtoms.return_value = 2
+        config = AtomicFeaturesConfig(
+            density_enabled=True,
+            curvature_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((3.0, 0.5),),
+            curvature_neutral_value=4.25,
+        )
+
+        with patch.dict(
+            sys.modules,
+            {
+                "src.features.dg_gl_features": g6_module,
+                "src.features.descriptors_3d": coordinates_module,
+                "src.features.density_features": source_module,
+            },
+        ):
+            result = build_density_features(mol, conf_id=0, config=config)
+
+        self.assertEqual(result.shape, (2, 12))
+        np.testing.assert_array_equal(
+            result[:, [1, 2, 3, 4, 7, 8, 9, 10]],
+            np.full((2, 8), 4.25, dtype=np.float32),
+        )
+        np.testing.assert_array_equal(result[:, [5, 11]], 0.0)
 
 
 if __name__ == "__main__":
