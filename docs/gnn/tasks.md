@@ -88,7 +88,7 @@
 - [x] **T8.3** Implementar message passing GINE.
 - [x] **T8.4** Apilar capas con norm/activación/dropout.
 - [x] **T8.5** Implementar residuals.
-- [ ] **T8.6** Implementar pooling.
+- [x] **T8.6** Implementar pooling.
 - [ ] **T8.7** Implementar readout.
 - [ ] **T8.8** Implementar `encode()`.
 - [ ] **T8.9** Probar forward/backward.

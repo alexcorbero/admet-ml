@@ -7,8 +7,11 @@ from .gnn import (
     GINEMessagePassingStack,
     GINEStack,
     GlobalPooling,
+    GraphReadout,
     GraphPooling,
     MessagePassingStack,
+    Readout,
+    ScalarReadout,
     NodeEncoder,
     NodeFeatureEncoder,
 )
@@ -24,4 +27,7 @@ __all__ = [
     "MessagePassingStack",
     "GlobalPooling",
     "GraphPooling",
+    "ScalarReadout",
+    "GraphReadout",
+    "Readout",
 ]

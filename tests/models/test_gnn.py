@@ -19,6 +19,7 @@ from src.models.gnn import (
     GINEMessagePassing,
     GINEMessagePassingStack,
     GlobalPooling,
+    ScalarReadout,
     NodeFeatureEncoder,
 )
 
@@ -202,6 +203,28 @@ class GlobalPoolingTests(unittest.TestCase):
             pooling(self.x, torch.tensor([0], dtype=torch.long))
         with self.assertRaisesRegex(TypeError, "torch.long"):
             pooling(self.x, torch.tensor([0, 0, 1], dtype=torch.int32))
+
+
+@unittest.skipUnless(torch is not None, "PyTorch is not installed")
+class ScalarReadoutTests(unittest.TestCase):
+    def test_returns_one_regression_value_per_graph(self):
+        config = GNNConfig(
+            model=ModelConfig(hidden_dim=6, readout_hidden_dim=4, pooling="mean_max")
+        )
+        readout = ScalarReadout.from_config(config)
+        embeddings = torch.randn((3, 12), dtype=torch.float32)
+
+        predictions = readout(embeddings)
+
+        self.assertEqual(readout.input_dim, 12)
+        self.assertEqual(readout.hidden_dim, 4)
+        self.assertEqual(tuple(predictions.shape), (3, 1))
+        self.assertTrue(torch.isfinite(predictions).all().item())
+
+    def test_rejects_wrong_embedding_shape(self):
+        readout = ScalarReadout(input_dim=5, hidden_dim=3)
+        with self.assertRaisesRegex(ValueError, "shape"):
+            readout(torch.zeros((2, 4), dtype=torch.float32))
 
 
 if __name__ == "__main__":

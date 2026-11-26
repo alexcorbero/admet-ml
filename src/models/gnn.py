@@ -19,6 +19,7 @@ _NodeEncoderBase = nn.Module if nn is not None else object
 _MessagePassingBase = nn.Module if nn is not None else object
 _MessagePassingStackBase = nn.Module if nn is not None else object
 _PoolingBase = nn.Module if nn is not None else object
+_ReadoutBase = nn.Module if nn is not None else object
 
 
 class AtomicNumberEmbedding(_EmbeddingBase):
@@ -343,9 +344,68 @@ class GlobalPooling(_PoolingBase):
         return torch.cat((pooled_mean, pooled_max), dim=1)
 
 
+class ScalarReadout(_ReadoutBase):
+    """Map a graph embedding to one scalar prediction per graph.
+
+    The readout is an MLP for the regression target. It consumes already
+    pooled graph embeddings; graph pooling itself remains the responsibility
+    of :class:`GlobalPooling`.
+    """
+
+    def __init__(self, input_dim: int, hidden_dim: int) -> None:
+        if nn is None:
+            raise ImportError(
+                "ScalarReadout requires PyTorch; install the model dependencies."
+            )
+        for name, value in (("input_dim", input_dim), ("hidden_dim", hidden_dim)):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer.")
+        super().__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.network = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
+        )
+
+    @classmethod
+    def from_config(
+        cls,
+        config: GNNConfig,
+        input_dim: int | None = None,
+    ) -> "ScalarReadout":
+        """Build the scalar readout from model configuration."""
+        if not isinstance(config, GNNConfig):
+            raise TypeError("config must be a GNNConfig instance.")
+        if input_dim is None:
+            pooling_width = 2 if config.model.pooling == "mean_max" else 1
+            input_dim = config.model.hidden_dim * pooling_width
+        return cls(input_dim, config.model.readout_hidden_dim)
+
+    def forward(self, graph_embeddings):
+        """Return predictions with shape ``[num_graphs, 1]``."""
+        if torch is None:  # pragma: no cover - constructor raises first
+            raise ImportError(
+                "ScalarReadout requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(graph_embeddings, torch.Tensor):
+            raise TypeError("graph_embeddings must be a torch.Tensor.")
+        if graph_embeddings.ndim != 2 or graph_embeddings.shape[1] != self.input_dim:
+            raise ValueError(
+                f"graph_embeddings must have shape [B, {self.input_dim}]; "
+                f"got {tuple(graph_embeddings.shape)}."
+            )
+        if not graph_embeddings.is_floating_point():
+            raise TypeError("graph_embeddings must use a floating-point dtype.")
+        return self.network(graph_embeddings)
+
+
 # Descriptive alias for callers that use the convolution terminology.
 GINEConvLayer = GINEMessagePassing
 GINEStack = GINEMessagePassingStack
 MessagePassingStack = GINEMessagePassingStack
 GraphPooling = GlobalPooling
+GraphReadout = ScalarReadout
+Readout = ScalarReadout
 
