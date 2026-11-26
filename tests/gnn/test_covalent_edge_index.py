@@ -1,12 +1,14 @@
-"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.6)."""
+"""Unit tests for RDKit covalent, radius, and hybrid edge features (T3.1-T3.7)."""
 
+from dataclasses import fields
+import inspect
 import unittest
 from unittest.mock import patch
 
 import numpy as np
 from rdkit import Chem
 
-from src.gnn.config import GraphConfig
+from src.gnn.config import AtomicFeaturesConfig, GraphConfig
 from src.gnn.edge_features import (
     build_covalent_edge_index,
     build_edge_features,
@@ -654,6 +656,38 @@ class GeometricEdgeFeatureTests(unittest.TestCase):
         self.assertEqual(edge_index.shape, (2, 0))
         self.assertEqual(edge_attr.shape, (0, 58))
         self.assertEqual(edge_attr.dtype, np.dtype(np.float32))
+
+
+class EdgeKernelSeparationTests(unittest.TestCase):
+    def test_edge_attr_width_has_no_additional_dg_kernel_channels(self):
+        molecule, conf_id = molecule_with_conformer(
+            "CC",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        )
+        edge_index, edge_attr = build_edge_features(
+            molecule,
+            conf_id=conf_id,
+            config=GraphConfig(
+                edge_mode="covalent",
+                cutoff=4.0,
+                rbf_num_centers=4,
+            ),
+        )
+
+        # T3.5 chemical width (25) + T3.6 distance (1) + Gaussian RBFs (4).
+        self.assertEqual(edge_attr.shape, (edge_index.shape[1], 30))
+
+    def test_dg_kernels_are_scoped_to_density_not_edge_attributes(self):
+        graph_config_fields = {field.name for field in fields(GraphConfig)}
+        atomic_config_fields = {field.name for field in fields(AtomicFeaturesConfig)}
+        edge_builder_parameters = set(inspect.signature(build_edge_features).parameters)
+
+        self.assertIn("dg_kernel", atomic_config_fields)
+        self.assertIn("dg_kernel_configs", atomic_config_fields)
+        self.assertNotIn("dg_kernel", graph_config_fields)
+        self.assertNotIn("dg_kernel_configs", graph_config_fields)
+        self.assertNotIn("dg_kernel", edge_builder_parameters)
+        self.assertNotIn("dg_kernel_configs", edge_builder_parameters)
 
 
 
