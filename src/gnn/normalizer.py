@@ -7,6 +7,7 @@ statistics; those responsibilities belong to later tasks.
 
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -81,9 +82,9 @@ class FeatureStatistics:
 class GraphFeatureNormalizer:
     """Train-fitted statistics for the columns selected by T7.1.
 
-    ``fit`` is the only operation implemented here. It consumes the supplied
-    graphs as training data, stores statistics, and returns ``self``. It never
-    reads targets or mutates the graph objects.
+    ``fit`` consumes the supplied graphs as training data and stores
+    statistics. Transform methods return copied graphs and never mutate the
+    input objects.
     """
 
     config: GNNConfig
@@ -200,6 +201,52 @@ class GraphFeatureNormalizer:
         self.statistics = fitted
         return self
 
+    def transform_graph(self, graph):
+        """Return a copy of ``graph`` with fitted numeric columns scaled.
+
+        Only columns recorded by :meth:`fit` are changed. Curvature masks are
+        preserved, and invalid curvature values are left at their raw neutral
+        value rather than being treated as observations or transformed.
+        """
+        self._require_fitted()
+        transformed = copy(graph)
+
+        for group, statistics in self.statistics.items():
+            values = getattr(graph, group, None)
+            output = _clone_feature_matrix(
+                values,
+                group=group,
+            )
+            full_columns = _get_full_feature_columns(self.config)[group]
+            _transform_matrix(
+                output,
+                full_columns=full_columns,
+                statistics=statistics,
+                group=group,
+            )
+            setattr(transformed, group, output)
+
+        if hasattr(transformed, "x_chem") and hasattr(transformed, "x_dg"):
+            transformed.x = _concatenate_node_features(
+                transformed.x_chem,
+                transformed.x_dg,
+            )
+        return transformed
+
+    def transform_graphs(self, graphs):
+        """Return transformed copies for every graph in ``graphs``."""
+        self._require_fitted()
+        if isinstance(graphs, (str, bytes)):
+            raise TypeError("graphs must be an iterable of graph objects.")
+        try:
+            return [self.transform_graph(graph) for graph in graphs]
+        except TypeError as exc:
+            raise TypeError("graphs must be an iterable of graph objects.") from exc
+
+    def _require_fitted(self) -> None:
+        if not self.fitted:
+            raise RuntimeError("GraphFeatureNormalizer must be fitted before transforming.")
+
 
 def get_scalable_feature_columns(
     config: GNNConfig,
@@ -312,6 +359,74 @@ def _collapse_counts(counts: np.ndarray) -> int | np.ndarray:
     if np.all(counts == counts[0]):
         return int(counts[0])
     return counts
+
+
+def _clone_feature_matrix(value, *, group: str):
+    """Clone a graph matrix while retaining its tensor/array implementation."""
+    if value is None:
+        raise ValueError(f"graph is missing required field {group!r}.")
+    if hasattr(value, "clone"):
+        return value.clone()
+    try:
+        return np.asarray(value, dtype=np.float64).copy()
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"graph field {group!r} must be numeric.") from exc
+
+
+def _transform_matrix(
+    output,
+    *,
+    full_columns: tuple[str, ...],
+    statistics: FeatureStatistics,
+    group: str,
+) -> None:
+    """Apply one group's statistics in place to a cloned matrix."""
+    if output.ndim != 2 or output.shape[1] != len(full_columns):
+        raise ValueError(
+            f"graph field {group!r} has shape {tuple(output.shape)}; expected "
+            f"[N, {len(full_columns)}]."
+        )
+    scales = np.where(statistics.std > 0.0, statistics.std, 1.0)
+    for statistic_index, column_name in enumerate(statistics.columns):
+        column_index = full_columns.index(column_name)
+        valid_rows = None
+        if group == "x_dg" and _is_curvature_value(column_name):
+            mask_index = full_columns.index(_curvature_mask_name(column_name))
+            valid_rows = _column_as_numpy(output[:, mask_index]).astype(bool)
+        values = _column_as_numpy(output[:, column_index])
+        if valid_rows is None:
+            valid_rows = np.ones(values.shape[0], dtype=bool)
+        if not np.isfinite(values[valid_rows]).all():
+            raise ValueError(
+                f"graph field {group!r} contains NaN or infinite values in "
+                f"column {column_name!r}."
+            )
+        normalized = (values - statistics.mean[statistic_index]) / scales[statistic_index]
+        _assign_column_values(output, column_index, normalized, valid_rows)
+
+
+def _column_as_numpy(values) -> np.ndarray:
+    """Convert a one-dimensional tensor/array view for validation and masks."""
+    if hasattr(values, "detach"):
+        values = values.detach().cpu().numpy()
+    return np.asarray(values, dtype=np.float64)
+
+
+def _assign_column_values(output, column_index: int, values: np.ndarray, rows: np.ndarray) -> None:
+    """Assign normalized values to either a NumPy or PyTorch matrix."""
+    if hasattr(output, "new_tensor"):
+        output[rows, column_index] = output.new_tensor(values[rows])
+    else:
+        output[rows, column_index] = values[rows]
+
+
+def _concatenate_node_features(x_chem, x_dg):
+    """Rebuild the public ``x`` field from its transformed source tensors."""
+    if hasattr(x_chem, "new_tensor"):
+        import torch
+
+        return torch.cat((x_chem, x_dg), dim=1)
+    return np.concatenate((x_chem, x_dg), axis=1)
 
 
 def _as_float_matrix(value, *, group: str, graph_index: int) -> np.ndarray:

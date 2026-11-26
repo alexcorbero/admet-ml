@@ -229,6 +229,94 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "binary values"):
             GraphFeatureNormalizer.from_config(config).fit([graph])
 
+    def test_transform_graph_scales_selected_columns_without_mutating_input(self):
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=True,
+                include_rbf=False,
+            ),
+            atomic_features=AtomicFeaturesConfig(
+                include_aromaticity=False,
+                include_ring_membership=False,
+                include_hybridization=False,
+                include_chirality=False,
+                include_cip=False,
+            ),
+        )
+        graph = SimpleNamespace(
+            x_chem=np.array([[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]]),
+            x_dg=np.empty((2, 0)),
+            edge_attr=np.array([[1.0], [3.0]]),
+            x=np.array([[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]]),
+        )
+        normalizer = GraphFeatureNormalizer.from_config(config).fit([graph])
+
+        transformed = normalizer.transform_graph(graph)
+
+        np.testing.assert_allclose(
+            transformed.x_chem,
+            [[-1.0, -1.0, -1.0, -1.0], [1.0, 1.0, 1.0, 1.0]],
+        )
+        np.testing.assert_allclose(transformed.edge_attr, [[-1.0], [1.0]])
+        np.testing.assert_allclose(transformed.x, transformed.x_chem)
+        np.testing.assert_allclose(graph.x_chem, [[1.0, 2.0, 3.0, 10.0], [3.0, 4.0, 5.0, 14.0]])
+
+    def test_transform_graph_preserves_invalid_curvature_neutral_value_and_mask(self):
+        atomic_config = AtomicFeaturesConfig(
+            include_formal_charge=False,
+            include_heavy_atom_degree=False,
+            include_attached_hydrogens=False,
+            include_atomic_mass=False,
+            include_aromaticity=False,
+            include_ring_membership=False,
+            include_hybridization=False,
+            include_chirality=False,
+            include_cip=False,
+            density_enabled=True,
+            curvature_enabled=True,
+            density_elements=("C",),
+            dg_kernel_configs=((2.0, 1.0),),
+        )
+        config = GNNConfig(
+            graph=GraphConfig(
+                include_bond_features=False,
+                include_distance=False,
+                include_rbf=False,
+            ),
+            atomic_features=atomic_config,
+        )
+        names = get_density_feature_names(atomic_config)
+        x_dg = np.zeros((2, len(names)))
+        curvature_name = next(name for name in names if name.startswith("H_"))
+        mask_name = f"curvature_valid_{curvature_name[2:]}"
+        curvature_index = names.index(curvature_name)
+        mask_index = names.index(mask_name)
+        x_dg[:, curvature_index] = [0.0, 20.0]
+        for name_index, name in enumerate(names):
+            if name.startswith("curvature_valid_"):
+                x_dg[:, name_index] = 1.0
+        x_dg[:, mask_index] = [0.0, 1.0]
+        graph = SimpleNamespace(
+            x_chem=np.empty((2, 0)),
+            x_dg=x_dg,
+            edge_attr=np.empty((2, 0)),
+            x=x_dg.copy(),
+        )
+
+        transformed = GraphFeatureNormalizer.from_config(config).fit([graph]).transform_graph(graph)
+
+        self.assertEqual(transformed.x_dg[0, curvature_index], 0.0)
+        self.assertEqual(transformed.x_dg[1, curvature_index], 0.0)
+        np.testing.assert_array_equal(
+            transformed.x_dg[:, mask_index], x_dg[:, mask_index]
+        )
+
+    def test_transform_requires_fitted_statistics(self):
+        normalizer = GraphFeatureNormalizer.from_config(GNNConfig())
+        with self.assertRaisesRegex(RuntimeError, "fitted"):
+            normalizer.transform_graph(SimpleNamespace())
+
 
 if __name__ == "__main__":
     unittest.main()

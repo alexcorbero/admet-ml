@@ -75,7 +75,7 @@
 
 - [x] **T7.1** Definir columnas escalables.
 - [x] **T7.2** Implementar `fit(train_graphs)`.
-- [ ] **T7.3** Respetar máscaras de curvatura.
+- [x] **T7.3** Respetar máscaras de curvatura.
 - [ ] **T7.4** Implementar transformaciones.
 - [ ] **T7.5** Implementar guardado/carga de estadísticas.
 - [ ] **T7.6** Probar ausencia de leakage.
