@@ -157,8 +157,8 @@ def _curvature_from_geometry(
 
     G6 evaluates one target element at a time. The target-wise results are
     placed back into the original atom order so each output column remains a
-    node feature. Validity masks are propagated from G6; neutral replacement
-    is intentionally left to T4.7.
+    node feature. Validity masks are propagated from G6 and invalid curvature
+    values are replaced with the configured neutral value.
     """
     from src.features.dg_gl_features import (
         element_interactive_curvature_at_atoms,
@@ -205,6 +205,11 @@ def _curvature_from_geometry(
                     np.asarray(curvature["valid"], dtype=float)
                 )
 
+            valid_mask = values_by_name["curvature_valid"].astype(bool)
+            for name in _CURVATURE_VALUE_NAMES:
+                values = values_by_name[name]
+                values[~valid_mask] = config.curvature_neutral_value
+
             columns.extend(
                 values_by_name[name]
                 for name in _CURVATURE_FEATURE_NAMES
@@ -227,7 +232,7 @@ def build_density_features(
     density values use the shared analytical G6 derivative implementation.
     Number and optional charge density are supported here. When enabled,
     curvature values and their validity masks are emitted per local source
-    channel; neutral replacement remains reserved for T4.7.
+    channel; invalid curvature values use the configured neutral value.
     """
     if not isinstance(config, AtomicFeaturesConfig):
         raise TypeError("config must be an AtomicFeaturesConfig instance.")

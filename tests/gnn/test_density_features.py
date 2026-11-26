@@ -1,4 +1,4 @@
-"""Tests for local number, charge, curvature, and validity features (T4.3-T4.6)."""
+"""Tests for local density, curvature, validity, and neutral values (T4.3-T4.7)."""
 
 import sys
 import types
@@ -251,7 +251,7 @@ class DensityFeatureBuildTests(unittest.TestCase):
             result[2], [1, 3, 13, 23, 33, 1, 1, 3, 13, 23, 33, 1]
         )
 
-    def test_curvature_mask_preserves_invalid_values_for_t47(self):
+    def test_invalid_curvature_uses_configured_neutral_value(self):
         coords = np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
         mapped_symbols = np.asarray(["C", "O"])
         radii = np.asarray([1.0, 1.1])
@@ -299,6 +299,7 @@ class DensityFeatureBuildTests(unittest.TestCase):
             curvature_enabled=True,
             density_elements=("C",),
             dg_kernel_configs=((3.0, 0.5),),
+            curvature_neutral_value=7.5,
         )
 
         with patch.dict(
@@ -314,8 +315,9 @@ class DensityFeatureBuildTests(unittest.TestCase):
         self.assertEqual(result.shape, (2, 12))
         self.assertTrue(np.all(result[0, [5, 11]] == 1.0))
         self.assertTrue(np.all(result[1, [5, 11]] == 0.0))
-        self.assertTrue(
-            np.isnan(result[1, [1, 2, 3, 4, 7, 8, 9, 10]]).all()
+        np.testing.assert_array_equal(
+            result[1, [1, 2, 3, 4, 7, 8, 9, 10]],
+            np.full(8, 7.5, dtype=np.float32),
         )
 
 
