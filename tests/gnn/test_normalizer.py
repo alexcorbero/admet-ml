@@ -289,6 +289,7 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
             curvature_enabled=True,
             density_elements=("C",),
             dg_kernel_configs=((2.0, 1.0),),
+            curvature_neutral_value=7.5,
         )
         config = GNNConfig(
             graph=GraphConfig(
@@ -304,7 +305,7 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
         mask_name = f"curvature_valid_{curvature_name[2:]}"
         curvature_index = names.index(curvature_name)
         mask_index = names.index(mask_name)
-        x_dg[:, curvature_index] = [0.0, 20.0]
+        x_dg[:, curvature_index] = [7.5, 20.0]
         for name_index, name in enumerate(names):
             if name.startswith("curvature_valid_"):
                 x_dg[:, name_index] = 1.0
@@ -318,8 +319,9 @@ class ScalableFeatureColumnsTests(unittest.TestCase):
 
         transformed = GraphFeatureNormalizer.from_config(config).fit([graph]).transform_graph(graph)
 
-        self.assertEqual(transformed.x_dg[0, curvature_index], 0.0)
+        self.assertEqual(transformed.x_dg[0, curvature_index], 7.5)
         self.assertEqual(transformed.x_dg[1, curvature_index], 0.0)
+        self.assertTrue(np.isfinite(transformed.x_dg).all())
         np.testing.assert_array_equal(
             transformed.x_dg[:, mask_index], x_dg[:, mask_index]
         )
