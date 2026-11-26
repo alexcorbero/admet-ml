@@ -14,7 +14,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when torch is absent
     nn = None
 
 from src.gnn.config import GNNConfig
-from src.gnn.graph_builder import get_node_feature_names
 
 
 _MAX_ATOMIC_NUMBER = 118
@@ -98,12 +97,11 @@ class NodeFeatureEncoder(_NodeEncoderBase):
             raise TypeError("config must be a GNNConfig instance.")
         super().__init__()
         self.hidden_dim = config.model.hidden_dim
-        self.num_node_features = len(get_node_feature_names(config))
+        self.num_node_features: int | None = None
         self.atom_embedding = AtomicNumberEmbedding(self.hidden_dim)
-        self.projection = nn.Linear(
-            self.hidden_dim + self.num_node_features,
-            self.hidden_dim,
-        )
+        # The model layer must not depend on graph_builder's feature schema.
+        # LazyLinear binds to the actual graph tensor on first use instead.
+        self.projection = nn.LazyLinear(self.hidden_dim)
 
     @classmethod
     def from_config(cls, config: GNNConfig) -> "NodeFeatureEncoder":
@@ -124,7 +122,9 @@ class NodeFeatureEncoder(_NodeEncoderBase):
             raise ValueError(f"x must have shape [N, F]; got {tuple(x.shape)}.")
         if x.shape[0] != z.shape[0]:
             raise ValueError("z and x must contain the same number of nodes.")
-        if x.shape[1] != self.num_node_features:
+        if self.num_node_features is None:
+            self.num_node_features = int(x.shape[1])
+        elif x.shape[1] != self.num_node_features:
             raise ValueError(
                 f"x must have {self.num_node_features} feature columns; "
                 f"got {x.shape[1]}."

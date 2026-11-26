@@ -8,7 +8,6 @@ except ModuleNotFoundError:  # pragma: no cover - environment dependent
     torch = None
 
 from src.gnn.config import GNNConfig, ModelConfig
-from src.gnn.graph_builder import get_node_feature_names
 from src.models.gnn import (
     AtomicNumberEmbedding,
     GINEMessagePassing,
@@ -56,7 +55,7 @@ class NodeFeatureEncoderTests(unittest.TestCase):
     def test_combines_z_embedding_and_x_into_hidden_vectors(self):
         config = GNNConfig(model=ModelConfig(hidden_dim=8))
         encoder = NodeFeatureEncoder(config)
-        x = torch.zeros((3, len(get_node_feature_names(config))), dtype=torch.float32)
+        x = torch.zeros((3, 5), dtype=torch.float32)
 
         result = encoder(torch.tensor([6, 8, 17], dtype=torch.long), x)
 
@@ -67,6 +66,10 @@ class NodeFeatureEncoderTests(unittest.TestCase):
     def test_rejects_node_feature_shape_mismatch(self):
         config = GNNConfig(model=ModelConfig(hidden_dim=8))
         encoder = NodeFeatureEncoder(config)
+        encoder(
+            torch.tensor([6], dtype=torch.long),
+            torch.zeros((1, 4), dtype=torch.float32),
+        )
         with self.assertRaisesRegex(ValueError, "feature columns"):
             encoder(
                 torch.tensor([6], dtype=torch.long),
