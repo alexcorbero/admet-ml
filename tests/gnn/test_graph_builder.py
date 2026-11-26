@@ -142,6 +142,14 @@ class GraphBuilderTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             build_graph(None, conf_id=0, config=None)
 
+    def test_target_is_required(self):
+        with self.assertRaisesRegex(TypeError, "y is required"):
+            build_graph(None, conf_id=0, config=GNNConfig(), y=None)
+
+    def test_target_argument_cannot_be_omitted(self):
+        with self.assertRaises(TypeError):
+            build_graph(None, conf_id=0, config=GNNConfig())
+
     def _valid_data(self):
         return _FakeData(
             num_nodes=2,
