@@ -41,7 +41,7 @@
 
 ## Fase 4. Densidad y curvatura (`src/gnn/density_features.py`)
 
-- [ ] **T4.1** Definir canales y nombres.
+- [x] **T4.1** Definir canales y nombres.
 - [ ] **T4.2** Reutilizar derivadas analíticas de G6.
 - [ ] **T4.3** Implementar densidad por átomo.
 - [ ] **T4.4** Implementar densidad por carga opcional.

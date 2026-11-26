@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+
 from .config import AtomicFeaturesConfig
 
 
@@ -22,6 +24,54 @@ def _source_channels(config: AtomicFeaturesConfig) -> tuple[str, ...]:
 def _kernel_label(config: AtomicFeaturesConfig, kernel_index: int) -> str:
     """Return the stable name fragment for one configured DG kernel."""
     return f"{config.dg_kernel}_{kernel_index}"
+
+
+def _load_g6_derivative_primitives():
+    """Load the analytical G6 derivative primitives without duplicating them."""
+    from src.features.dg_gl_features import (
+        density_field_derivatives as g6_density_field_derivatives,
+        radial_kernel_derivatives as g6_radial_kernel_derivatives,
+    )
+
+    return g6_radial_kernel_derivatives, g6_density_field_derivatives
+
+
+def radial_kernel_derivatives(
+    distances: np.ndarray,
+    scales: np.ndarray,
+    kernel: str,
+    order: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Reuse the G6 radial kernel and first-two-derivative implementation."""
+    g6_radial_kernel_derivatives, _ = _load_g6_derivative_primitives()
+    return g6_radial_kernel_derivatives(
+        distances=distances,
+        scales=scales,
+        kernel=kernel,
+        order=order,
+    )
+
+
+def density_field_derivatives(
+    evaluation_coords: np.ndarray,
+    source_coords: np.ndarray,
+    source_weights: np.ndarray,
+    pair_scales: np.ndarray,
+    allowed_mask: np.ndarray,
+    kernel: str,
+    order: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Reuse the G6 weighted density, gradient, and Hessian implementation."""
+    _, g6_density_field_derivatives = _load_g6_derivative_primitives()
+    return g6_density_field_derivatives(
+        evaluation_coords=evaluation_coords,
+        source_coords=source_coords,
+        source_weights=source_weights,
+        pair_scales=pair_scales,
+        allowed_mask=allowed_mask,
+        kernel=kernel,
+        order=order,
+    )
 
 
 def get_density_feature_names(
