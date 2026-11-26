@@ -11,6 +11,7 @@ from src.gnn.config import GNNConfig, ModelConfig
 from src.models.gnn import (
     AtomicNumberEmbedding,
     GINEMessagePassing,
+    GINEMessagePassingStack,
     NodeFeatureEncoder,
 )
 
@@ -104,6 +105,41 @@ class GINEMessagePassingTests(unittest.TestCase):
                 torch.tensor([[0], [1]], dtype=torch.long),
                 torch.zeros((1, 2)),
             )
+
+
+@unittest.skipUnless(
+    torch is not None and torch_geometric is not None,
+    "PyTorch and PyTorch Geometric are not installed",
+)
+class GINEMessagePassingStackTests(unittest.TestCase):
+    def test_applies_configured_layers_norm_activation_and_dropout(self):
+        config = GNNConfig(
+            model=ModelConfig(
+                hidden_dim=8,
+                num_message_passing_layers=2,
+                dropout=0.0,
+            )
+        )
+        stack = GINEMessagePassingStack.from_config(config, edge_dim=3)
+        x = torch.randn((3, 8), dtype=torch.float32)
+        edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
+        edge_attr = torch.randn((4, 3), dtype=torch.float32)
+
+        result = stack(x, edge_index, edge_attr)
+
+        self.assertEqual(len(stack.layers), 2)
+        self.assertEqual(len(stack.norms), 2)
+        self.assertEqual(len(stack.activations), 2)
+        self.assertEqual(len(stack.dropouts), 2)
+        self.assertEqual(tuple(result.shape), (3, 8))
+        self.assertTrue(torch.isfinite(result).all().item())
+
+    def test_rejects_unsupported_stack_options(self):
+        config = GNNConfig(model=ModelConfig(hidden_dim=8, num_message_passing_layers=1))
+        with self.assertRaisesRegex(ValueError, "normalization"):
+            GINEMessagePassingStack(config, edge_dim=3, normalization="batch")
+        with self.assertRaisesRegex(ValueError, "activation"):
+            GINEMessagePassingStack(config, edge_dim=3, activation="gelu")
 
 
 if __name__ == "__main__":

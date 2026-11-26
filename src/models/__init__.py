@@ -4,6 +4,9 @@ from .gnn import (
     AtomicNumberEmbedding,
     GINEConvLayer,
     GINEMessagePassing,
+    GINEMessagePassingStack,
+    GINEStack,
+    MessagePassingStack,
     NodeEncoder,
     NodeFeatureEncoder,
 )
@@ -14,4 +17,7 @@ __all__ = [
     "NodeEncoder",
     "GINEMessagePassing",
     "GINEConvLayer",
+    "GINEMessagePassingStack",
+    "GINEStack",
+    "MessagePassingStack",
 ]

@@ -1,8 +1,4 @@
-"""Atomic-number embedding and node encoder for the G7 molecular GNN.
-
-The atom embedding belongs to T8.1 and the node encoder to T8.2. Message
-passing, pooling, and readout are intentionally implemented in later tasks.
-"""
+"""Node encoders and edge-aware message passing for the G7 molecular GNN."""
 
 from __future__ import annotations
 
@@ -21,6 +17,7 @@ _NUM_ATOMIC_EMBEDDINGS = _MAX_ATOMIC_NUMBER + 1
 _EmbeddingBase = nn.Module if nn is not None else object
 _NodeEncoderBase = nn.Module if nn is not None else object
 _MessagePassingBase = nn.Module if nn is not None else object
+_MessagePassingStackBase = nn.Module if nn is not None else object
 
 
 class AtomicNumberEmbedding(_EmbeddingBase):
@@ -202,6 +199,74 @@ class GINEMessagePassing(_MessagePassingBase):
         return self.convolution(x, edge_index, edge_attr)
 
 
+class GINEMessagePassingStack(_MessagePassingStackBase):
+    """Stack GINE layers with normalization, activation, and dropout.
+
+    This is deliberately only the sequential message-passing trunk. Residual
+    connections, graph pooling, and readout are separate model concerns and
+    are implemented by later tasks.
+    """
+
+    def __init__(
+        self,
+        config: GNNConfig,
+        edge_dim: int,
+        *,
+        normalization: str = "layer",
+        activation: str = "relu",
+    ) -> None:
+        if nn is None:
+            raise ImportError(
+                "GINEMessagePassingStack requires PyTorch; install the model dependencies."
+            )
+        if not isinstance(config, GNNConfig):
+            raise TypeError("config must be a GNNConfig instance.")
+        if isinstance(edge_dim, bool) or not isinstance(edge_dim, int) or edge_dim <= 0:
+            raise ValueError("edge_dim must be a positive integer.")
+        if not isinstance(normalization, str) or normalization.lower() != "layer":
+            raise ValueError("normalization must be 'layer'.")
+        if not isinstance(activation, str) or activation.lower() != "relu":
+            raise ValueError("activation must be 'relu'.")
+
+        super().__init__()
+        self.hidden_dim = config.model.hidden_dim
+        self.edge_dim = edge_dim
+        self.num_layers = config.model.num_message_passing_layers
+        self.normalization = normalization.lower()
+        self.activation = activation.lower()
+        self.layers = nn.ModuleList(
+            GINEMessagePassing(self.hidden_dim, edge_dim)
+            for _ in range(self.num_layers)
+        )
+        self.norms = nn.ModuleList(
+            nn.LayerNorm(self.hidden_dim) for _ in range(self.num_layers)
+        )
+        self.activations = nn.ModuleList(
+            nn.ReLU() for _ in range(self.num_layers)
+        )
+        self.dropouts = nn.ModuleList(
+            nn.Dropout(config.model.dropout) for _ in range(self.num_layers)
+        )
+
+    @classmethod
+    def from_config(cls, config: GNNConfig, edge_dim: int) -> "GINEMessagePassingStack":
+        """Build the configured message-passing stack."""
+        return cls(config, edge_dim)
+
+    def forward(self, x, edge_index, edge_attr):
+        """Apply all configured GINE layers to node states."""
+        for layer, norm, activation, dropout in zip(
+            self.layers,
+            self.norms,
+            self.activations,
+            self.dropouts,
+        ):
+            x = dropout(activation(norm(layer(x, edge_index, edge_attr))))
+        return x
+
+
 # Descriptive alias for callers that use the convolution terminology.
 GINEConvLayer = GINEMessagePassing
+GINEStack = GINEMessagePassingStack
+MessagePassingStack = GINEMessagePassingStack
 
