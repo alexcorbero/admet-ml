@@ -53,6 +53,78 @@ def get_graph_feature_names(
     }
 
 
+def _validate_graph_data(data, config: GNNConfig, torch) -> None:
+    """Validate the raw graph tensor contract before returning ``Data``."""
+    from .atom_features import get_atom_feature_names
+    from .density_features import get_density_feature_names
+    from .edge_features import get_edge_feature_names
+
+    n_nodes = int(data.num_nodes)
+    edge_index = getattr(data, "edge_index", None)
+    if edge_index is None:
+        raise ValueError("graph is missing required field 'edge_index'.")
+    edge_index_shape = tuple(edge_index.shape)
+    n_edges = int(edge_index_shape[1]) if len(edge_index_shape) > 1 else -1
+    expected_shapes = {
+        "z": (n_nodes,),
+        "x": (n_nodes, len(get_node_feature_names(config))),
+        "x_chem": (
+            n_nodes,
+            len(get_atom_feature_names(config.atomic_features)),
+        ),
+        "x_dg": (
+            n_nodes,
+            len(get_density_feature_names(config.atomic_features)),
+        ),
+        "pos": (n_nodes, 3),
+        "edge_index": (2, n_edges),
+        "edge_attr": (n_edges, len(get_edge_feature_names(config.graph))),
+    }
+    expected_dtypes = {
+        "z": torch.long,
+        "x": torch.float32,
+        "x_chem": torch.float32,
+        "x_dg": torch.float32,
+        "pos": torch.float32,
+        "edge_index": torch.long,
+        "edge_attr": torch.float32,
+    }
+    finite_fields = {"x", "x_chem", "x_dg", "pos", "edge_attr"}
+
+    for field_name, expected_shape in expected_shapes.items():
+        tensor = getattr(data, field_name, None)
+        if tensor is None:
+            raise ValueError(f"graph is missing required field {field_name!r}.")
+        actual_shape = tuple(tensor.shape)
+        if actual_shape != expected_shape:
+            raise ValueError(
+                f"{field_name} must have shape {expected_shape}; "
+                f"got {actual_shape}."
+            )
+        if tensor.dtype != expected_dtypes[field_name]:
+            raise ValueError(
+                f"{field_name} must have dtype {expected_dtypes[field_name]}; "
+                f"got {tensor.dtype}."
+            )
+        if field_name in finite_fields and not bool(
+            torch.isfinite(tensor).all()
+        ):
+            raise ValueError(f"{field_name} contains NaN or infinite values.")
+
+    if hasattr(data, "y"):
+        if tuple(data.y.shape) != (1,):
+            raise ValueError(f"y must have shape (1,); got {tuple(data.y.shape)}.")
+        if data.y.dtype != torch.float32:
+            raise ValueError(
+                f"y must have dtype {torch.float32}; got {data.y.dtype}."
+            )
+        if not bool(torch.isfinite(data.y).all()):
+            raise ValueError("y contains NaN or infinite values.")
+
+    if tuple(data.conf_id.shape) != (1,) or data.conf_id.dtype != torch.long:
+        raise ValueError("conf_id must have shape (1,) and dtype torch.long.")
+
+
 def build_graph(
     mol,
     conf_id: int,
@@ -111,5 +183,6 @@ def build_graph(
     if mol_id is not None:
         data.mol_id = str(mol_id)
     data.conf_id = torch.tensor([int(conf_id)], dtype=torch.long)
+    _validate_graph_data(data, config, torch)
 
     return data

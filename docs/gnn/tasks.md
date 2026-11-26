@@ -56,7 +56,7 @@
 
 - [x] **T5.1** Implementar nombres de features de grafo.
 - [x] **T5.2** Implementar `build_graph()`.
-- [ ] **T5.3** Añadir target y metadata.
+- [x] **T5.3** Añadir target y metadata.
 - [ ] **T5.4** Validar shapes, dtypes y finitud.
 - [ ] **T5.5** Verificar batching PyG.
 - [ ] **T5.6** Añadir smoke test RDKit → `Data` → batch.
