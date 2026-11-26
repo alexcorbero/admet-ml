@@ -58,7 +58,7 @@
 - [x] **T5.2** Implementar `build_graph()`.
 - [x] **T5.3** Añadir target y metadata.
 - [x] **T5.4** Validar shapes, dtypes y finitud.
-- [ ] **T5.5** Verificar batching PyG.
+- [x] **T5.5** Verificar batching PyG.
 - [ ] **T5.6** Añadir smoke test RDKit → `Data` → batch.
 
 ## Fase 6. Dataset y cache (`src/gnn/dataset.py`)
