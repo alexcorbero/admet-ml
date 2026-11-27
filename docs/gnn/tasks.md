@@ -100,7 +100,7 @@
 - [x] **T9.1** Cargar datos/conformeros y configuración.
 - [x] **T9.2** Mostrar un grafo de ejemplo.
 - [x] **T9.3** Mostrar esquema de features.
-- [ ] **T9.4** Generar grafos crudos.
+- [x] **T9.4** Generar grafos crudos.
 - [ ] **T9.5** Registrar fallos.
 - [ ] **T9.6** Guardar grafos, metadata y config ID.
 - [ ] **T9.7** Verificar cache incompatible.
