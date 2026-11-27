@@ -102,7 +102,7 @@
 - [x] **T9.3** Mostrar esquema de features.
 - [x] **T9.4** Generar grafos crudos.
 - [ ] **T9.5** Registrar fallos.
-- [ ] **T9.6** Guardar grafos, metadata y config ID.
+- [x] **T9.6** Guardar grafos, metadata y config ID.
 - [ ] **T9.7** Verificar cache incompatible.
 - [ ] **T9.8** Ejecutar `Restart & Run All` en smoke.
 
