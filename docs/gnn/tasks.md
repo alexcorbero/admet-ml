@@ -108,7 +108,7 @@
 
 ## Fase 10. `08_gnn_training.ipynb`
 
-- [ ] **T10.1** Cargar grafos y scaffold splits.
+- [x] **T10.1** Cargar grafos y scaffold splits.
 - [ ] **T10.2** Ajustar normalizer con train.
 - [ ] **T10.3** Crear DataLoaders.
 - [ ] **T10.4** Fijar seeds/dispositivo.
