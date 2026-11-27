@@ -1,0 +1,96 @@
+{
+  "conformer_method_counts": {
+    "ETKDG_fallback": 1665,
+    "MMFF": 8120,
+    "UFF": 167
+  },
+  "dataset": "Solubility_AqSolDB",
+  "dataset_slug": "aqsoldb",
+  "embedding": {
+    "method": "ETKDGv3",
+    "n_conformers": 5,
+    "num_threads": 1,
+    "prune_rms_thresh_angstrom": 0.5
+  },
+  "excluded_records": 30,
+  "excluded_records_by_error_type": {
+    "ValueError": 30
+  },
+  "excluded_records_by_split": {
+    "test": 6,
+    "train_val": 24
+  },
+  "excluded_records_by_stage": {
+    "conformer_embedding": 30
+  },
+  "fallback_reason_counts": {
+    "MMFF produced no converged conformer with finite energy.": 1370,
+    "Neither MMFF nor UFF parameters are available.": 270,
+    "UFF produced no converged conformer with finite energy.": 25
+  },
+  "force_field_counts": {
+    "ETKDG_fallback": 1665,
+    "MMFF": 8120,
+    "UFF": 167
+  },
+  "format_version": 2,
+  "geometry_validation": {
+    "close_atom_pairs_are_excluded": false,
+    "coordinates_finite": true,
+    "minimum_atoms": 1,
+    "pairwise_distance_warning_threshold_angstrom": 0.05,
+    "planar_geometries_allowed": true,
+    "policy": "legacy",
+    "records_with_warnings": 631,
+    "records_with_warnings_by_split": {
+      "test": 86,
+      "train_val": 545
+    },
+    "single_atoms_are_excluded": false,
+    "warning_counts": {
+      "close_atom_pair": 597,
+      "single_atom": 34
+    }
+  },
+  "hydrogens": {
+    "added_with": "Chem.AddHs",
+    "note": "Some valid molecules legitimately contain zero hydrogen atoms; hydrogen presence is not required.",
+    "policy": "explicit",
+    "removed": false
+  },
+  "input_records": 9982,
+  "input_records_by_split": {
+    "test": 1997,
+    "train_val": 7985
+  },
+  "optimization": {
+    "eligible_energy": "finite",
+    "eligible_status": 0,
+    "max_iters": 200,
+    "num_threads": 0,
+    "policy": [
+      "Use MMFF when all molecule parameters are available.",
+      "If MMFF parameters are unavailable, try UFF when all UFF parameters are available.",
+      "If the selected force field produces no converged finite-energy conformer, use the first ETKDG conformer.",
+      "If neither force field has parameters, use the first ETKDG conformer.",
+      "When MMFF parameters exist but MMFF does not converge, do not try UFF; this matches 03_feature_engineering."
+    ]
+  },
+  "seed": {
+    "base_seed": 42,
+    "per_record_field": "seed",
+    "strategy": "fixed seed for every molecule (03_feature_engineering)"
+  },
+  "source": "TDC admet_group official train_val and test partitions",
+  "valid_records": 9952,
+  "valid_records_by_split": {
+    "test": 1991,
+    "train_val": 7961
+  },
+  "versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.11.9",
+    "rdkit": "2023.09.6"
+  }
+}

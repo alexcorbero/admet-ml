@@ -1,4 +1,6 @@
-/data
-__pycache__/
+# Ignore generated data except conformers
+/data/*
+!/data/conformers/
+!/data/conformers/**__pycache__/
 *.py[cod]
 .vscode
