@@ -96,12 +96,12 @@
 
 ## Fase 9. `07_gnn_graph_generation.ipynb`
 
-- [ ] **T9.0** Generar y persistir conformers 3D de AqSolDB.
+- [x] **T9.0** Generar y persistir conformers 3D de AqSolDB.
 - [x] **T9.1** Cargar datos/conformeros y configuración.
 - [x] **T9.2** Mostrar un grafo de ejemplo.
 - [x] **T9.3** Mostrar esquema de features.
 - [x] **T9.4** Generar grafos crudos.
-- [ ] **T9.5** Registrar fallos.
+- [x] **T9.5** Registrar fallos.
 - [x] **T9.6** Guardar grafos, metadata y config ID.
 - [ ] **T9.7** Verificar cache incompatible.
 - [ ] **T9.8** Ejecutar `Restart & Run All` en smoke.
