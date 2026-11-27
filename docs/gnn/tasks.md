@@ -103,7 +103,7 @@
 - [x] **T9.4** Generar grafos crudos.
 - [x] **T9.5** Registrar fallos.
 - [x] **T9.6** Guardar grafos, metadata y config ID.
-- [ ] **T9.7** Verificar cache incompatible.
+- [x] **T9.7** Verificar cache incompatible.
 - [x] **T9.8** Ejecutar `Restart & Run All` en smoke.
 
 ## Fase 10. `08_gnn_training.ipynb`
